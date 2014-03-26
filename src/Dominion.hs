@@ -1,25 +1,25 @@
 module Dominion (
                 -- | How to use: https:\/\/github.com\/egonschiele\/dominion
-                module Dominion, 
-                Option(..), 
+                module Dominion,
+                Option(..),
                 has, handValue, pileEmpty, getPlayer, cardsOf, validateBuy, validatePlay, getRound, countNum) where
 
-import           Prelude                hiding (log)
-import qualified Data.Map.Lazy          as M
-import qualified Dominion.Types         as T
-import           Dominion.Types         (Option(..))
-import qualified Dominion.Cards         as CA
-import           Control.Monad          hiding (join)
-import           Data.Maybe
-import           Control.Monad.State    hiding (state, join)
-import           Control.Monad.IO.Class
-import           Text.Printf
-import           Data.List
-import           Dominion.Utils
-import           Data.Either
-import           Data.Ord
 import           Control.Applicative
+import           Control.Monad          hiding (join)
+import           Control.Monad.IO.Class
+import           Control.Monad.State    hiding (join, state)
+import           Data.Either
+import           Data.List
+import qualified Data.Map.Lazy          as M
+import           Data.Maybe
+import           Data.Ord
+import qualified Dominion.Cards         as CA
 import           Dominion.Internal
+import           Dominion.Types         (Option (..))
+import qualified Dominion.Types         as T
+import           Dominion.Utils
+import           Prelude                hiding (log)
+import           Text.Printf
 
 -- | Convenience function. @ name \`uses\` strategy @ is the same as writing
 -- @ (name, strategy) @
@@ -30,8 +30,8 @@ name `uses` strategy = (makePlayer name, strategy)
 --
 -- > import Dominion
 -- > import Dominion.Strategies
--- >
--- > main = dominion ["adit" `uses` bigMoney, "maggie" `uses` bigMoney]
+--
+-- > main = dominion ["adit" `uses` bigMoney, "maggie" `uses` bigMoqney]
 dominion :: [(T.Player, T.Strategy)] -> IO [T.Result]
 dominion = dominionWithOpts []
 
@@ -91,7 +91,7 @@ returnResults :: T.Dominion T.Result
 returnResults = do
     state <- get
     let players = T.players state
-    results <- zip players <$> forM (indices players) countPoints 
+    results <- zip players <$> forM (indices players) countPoints
     let winner  = T.playerName . fst $ maximumBy (comparing snd) results
     when (T.verbose state) $ do
       liftIO $ putStrLn "Game Over!"
@@ -143,7 +143,7 @@ playsByPreference playerId cards = do
     unless (null playableCards) $ do
       playerId `plays` head playableCards
       playerId `playsByPreference` cards
- 
+
 -- | In the simplest case, this lets you play a card, like this:
 --
 -- > playerId `plays` smithy
@@ -151,7 +151,7 @@ playsByPreference playerId cards = do
 -- You can just use this function blindly, without checking to see if you
 -- have enough actions, or whether you have a smithy in your hand.
 -- `plays` will perform those  validations for you. It returns a `PlayResult`,
--- which is an `Either` with an error message or a return value.  
+-- which is an `Either` with an error message or a return value.
 --
 -- Some cards require an additional action. For example, if you use
 -- a workshop, you need to specify what card you're going to get. In that
@@ -166,9 +166,9 @@ playsByPreference playerId cards = do
 --
 -- > playerId `plays` throneRoom `with` (ThroneRoom market)
 plays :: T.Playable a => T.PlayerId -> a -> T.Dominion T.PlayResult
-playerId `plays` card = do 
+playerId `plays` card = do
     result <- T.play playerId card
-    case result of 
+    case result of
         Just x -> return (Just x)
         Nothing -> do modifyPlayer playerId (\p -> p{T.actions = T.actions p - 1})
                       return $ Nothing

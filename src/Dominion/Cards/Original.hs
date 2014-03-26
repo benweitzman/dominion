@@ -110,6 +110,6 @@ originalCards = [adventurer ,
                  -}
 -- smithy      = Card "Smithy" 4 [Action] [PlusCard 3]
 
-smithy = mkCard "Smithy" 4 0 [Action] (plusCards 3)
+-- smithy = mkCard "Smithy" 4 0 [Action] (plusCards 3)
 
-originalCards = [smithy]                
+originalCards = []                

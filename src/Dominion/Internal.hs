@@ -26,28 +26,28 @@ import           Text.Printf
 -- | see all of the cards in a player's hand.
 --
 -- > cards <- currentHand playerId
-currentHand :: T.PlayerId -> T.Dominion [T.Card]
+currentHand :: T.PlayerId -> T.Dominion [T.CardWrap]
 currentHand playerId = T.hand <$> getPlayer playerId
 
 -- | see if a player has a card in his hand.
 --
 -- > hasCard <- playerId `has` chapel
-has :: T.PlayerId -> T.Card -> T.Dominion Bool
+has :: T.PlayerId -> T.CardWrap -> T.Dominion Bool
 has playerId card = do
     player <- getPlayer playerId
-    return $ card `elem` (T.hand player)
+    return $ card `elem` T.hand player
 
 -- | see how many of this card a player has.
 --
 -- > numMarkets <- countNum playerId market
-countNum :: T.PlayerId -> T.Card -> T.Dominion Int
+countNum :: T.PlayerId -> T.CardWrap -> T.Dominion Int
 countNum playerId card = do
     player <- getPlayer playerId
     let allCards = T.deck player ++ T.discard player ++ T.hand player
     return $ count card allCards
 
 -- | What this card is worth in money.
-coinValue :: T.Card -> Int
+coinValue :: T.Card a => a -> Int
 coinValue = T.coinValue
 
 -- | Get the current round number.
@@ -62,7 +62,7 @@ handValue playerId = do
     return $ sum (map coinValue (T.hand player)) + T.extraMoney player
 
 -- | Check if this card's pile is empty. Returns True is the card is not in play.
-pileEmpty :: T.Card -> T.Dominion Bool
+pileEmpty :: T.CardWrap -> T.Dominion Bool
 pileEmpty card = do
     state <- get
     return $ case M.lookup card (T.cards state) of
@@ -72,7 +72,7 @@ pileEmpty card = do
 -- | Returns the card, or Nothing if that pile is empty.
 -- Useful because it automatically checks whether the pile is empty, and
 -- modifies state to subtract a card from the pile correctly.
-getCard :: T.Card -> T.Dominion (Maybe T.Card)
+getCard :: T.CardWrap -> T.Dominion (Maybe T.CardWrap)
 getCard card = do
     empty <- pileEmpty card
     if empty
@@ -102,7 +102,7 @@ log_ str = do
 
 -- | Given a player id and a number of cards to draw, draws that many cards
 -- from the deck, shuffling if necessary.
-drawFromDeck :: T.PlayerId -> Int -> T.Dominion [T.Card]
+drawFromDeck :: T.PlayerId -> Int -> T.Dominion [T.CardWrap]
 drawFromDeck playerId numCards = do
     player <- getPlayer playerId
     let deck = T.deck player
@@ -211,7 +211,7 @@ shuffleDeck_ player = do newDeck <- deckShuffle (deck ++ discard ++ hand)
 -- | Check that this player is able to purchase this card. Returns
 -- a `Right` if they can purchase the card, otherwise returns a `Left` with
 -- the reason why they can't purchase it.
-validateBuy :: T.PlayerId -> T.Card -> T.Dominion T.PlayResult
+validateBuy :: T.PlayerId -> T.CardWrap -> T.Dominion T.PlayResult
 validateBuy playerId card = do
     money <- handValue playerId
     state <- get
@@ -226,7 +226,7 @@ validateBuy playerId card = do
 -- | Check that this player is able to play this card. Returns
 -- a `Right` if they can play the card, otherwise returns a `Left` with
 -- the reason why they can't play it.
-validatePlay :: T.PlayerId -> T.Card -> T.Dominion T.PlayResult
+validatePlay :: T.PlayerId -> T.CardWrap -> T.Dominion T.PlayResult
 validatePlay playerId card = do
     player <- getPlayer playerId
     log playerId $ printf "validating that %s has a %s" (T.playerName player) (T.name card)
@@ -253,7 +253,7 @@ findLog (T.Log x : xs) = Just x
 findLog (_:xs) = findLog xs
 
 -- for parsing options
-findCards :: [T.Option] -> Maybe [T.Card]
+findCards :: [T.Option] -> Maybe [T.CardWrap]
 findCards [] = Nothing
 findCards (T.Cards x : xs) = Just x
 findCards (_:xs) = findCards xs
@@ -262,11 +262,11 @@ findCards (_:xs) = findCards xs
 -- The function gets a list of the cards drawn so far,
 -- most recent first. Returns a list of all the cards drawn (these cards
 -- are also placed into the player's hand)
-drawsUntil :: T.PlayerId -> ([T.Card] -> T.Dominion Bool) -> T.Dominion [T.Card]
+drawsUntil :: T.PlayerId -> ([T.CardWrap] -> T.Dominion Bool) -> T.Dominion [T.CardWrap]
 drawsUntil = drawsUntil_ []
 
 -- internal use for drawsUntil
-drawsUntil_ :: [T.Card] -> T.PlayerId -> ([T.Card] -> T.Dominion Bool) -> T.Dominion [T.Card]
+drawsUntil_ :: [T.CardWrap] -> T.PlayerId -> ([T.CardWrap] -> T.Dominion Bool) -> T.Dominion [T.CardWrap]
 drawsUntil_ alreadyDrawn playerId func = do
     drawnCards <- drawFromDeck playerId 1
     let cards = drawnCards ++ alreadyDrawn
@@ -276,30 +276,30 @@ drawsUntil_ alreadyDrawn playerId func = do
       else drawsUntil_ cards playerId func
 
 -- Does this card say you trash it when you play it?
-trashThisCard :: T.Card -> Bool
+trashThisCard :: T.Card a => a->  Bool
 trashThisCard card = False --T.TrashThisCard `elem` (card ^. T.effects)
 
 -- | Player trashes the given card.
-trashesCard :: T.PlayerId -> T.Card -> T.Dominion ()
+trashesCard :: T.PlayerId -> T.CardWrap -> T.Dominion ()
 playerId `trashesCard` card = do
   hasCard <- playerId `has` card
   when hasCard $ modifyPlayer playerId (\p -> p{T.hand=delete card (T.hand p)})
 
 -- | Player discards the given card.
-discardsCard :: T.PlayerId -> T.Card -> T.Dominion ()
+discardsCard :: T.PlayerId -> T.CardWrap -> T.Dominion ()
 playerId `discardsCard` card = do
   hasCard <- playerId `has` card
   when hasCard $ modifyPlayer playerId $ (\p -> p{T.hand=delete card (T.hand p),T.discard=card:T.discard p})
 
 -- Player returns the given card to the top of their deck.
-returnsCard :: T.PlayerId -> T.Card -> T.Dominion ()
+returnsCard :: T.PlayerId -> T.CardWrap -> T.Dominion ()
 playerId `returnsCard` card = do
   hasCard <- playerId `has` card
   when hasCard $ modifyPlayer playerId $ (\p -> p{T.hand=delete card (T.hand p), T.deck=card:T.deck p})
 
 -- If the top card in the player's deck is one of the cards
 -- listed in the provided array, then discard that card (used with spy).
-discardTopCard :: [T.Card] -> T.Player -> T.Player
+discardTopCard :: [T.CardWrap] -> T.Player -> T.Player
 discardTopCard cards player = if topCard `elem` cards
                                 then player{T.deck=tail deck,T.discard=topCard:T.discard player}
                                 else player
@@ -446,7 +446,7 @@ playerId `usesEffect` _ = return Nothing
 
 -- Checks that the player can gain the given card, then adds it to his/her
 -- discard pile.
-gainCardUpTo :: T.PlayerId -> Int -> T.Card -> T.Dominion T.PlayResult
+gainCardUpTo :: T.PlayerId -> Int -> T.CardWrap -> T.Dominion T.PlayResult
 gainCardUpTo playerId value card =
   if (T.cost card) > value
     then return . Just $ printf "Card is too expensive. You can gain a card costing up to %d but this card costs %d" value (T.cost card)
@@ -468,7 +468,7 @@ noop = T.virtual
 vpValue :: Int -> T.Virtual
 vpValue n = noop{T.pointsFunction=const $ return n }
 
-validator :: T.Card -> T.Virtual
+validator :: T.CardWrap -> T.Virtual
 validator card = noop{T.playFunction = \pid -> do result <- validatePlay pid card
                                                   case result of
                                                     Just x -> return (Just x)
@@ -476,12 +476,12 @@ validator card = noop{T.playFunction = \pid -> do result <- validatePlay pid car
                                                                   return Nothing
                      }
 
-trasher :: T.Card -> T.Virtual
+trasher :: T.CardWrap -> T.Virtual
 trasher card = noop{T.playFunction = \pid -> do trashesCard pid card 
                                                 return Nothing
                    }
 
-discarder :: T.Card -> T.Virtual
+discarder :: T.CardWrap -> T.Virtual
 discarder card = noop{T.playFunction = \pid -> do discardsCard pid card 
                                                   return Nothing
                      }
@@ -491,7 +491,7 @@ plusCards n = noop{T.playFunction = \pid -> do drawFromDeck pid n
                                                return Nothing
                   }
 
-mkCard :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
+{--mkCard :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
 mkCard name cost worth types effects = 
     let card = T.Card name cost worth types (validator card) effects (discarder card)
     in card
@@ -499,4 +499,4 @@ mkCard name cost worth types effects =
 mkCardToTrash :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
 mkCardToTrash name cost worth types effects = 
     let card = T.Card name cost worth types (validator card) effects (trasher card)
-    in card
+    in card--}

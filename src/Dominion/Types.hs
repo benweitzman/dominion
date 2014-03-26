@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification, FlexibleInstances, OverlappingInstances, UndecidableInstances #-}
+
 module Dominion.Types (
   module Dominion.Types
 ) where
@@ -88,9 +90,9 @@ data FollowupAction = ThroneRoom Card
 
 data Player = Player {
                 playerName :: String,
-                deck       :: [Card],
-                discard    :: [Card],
-                hand       :: [Card],
+                deck       :: [CardWrap],
+                discard    :: [CardWrap],
+                hand       :: [CardWrap],
                 actions    :: Int,
                 buys       :: Int,
                 -- | Extra money gained from an action card (like +1 money
@@ -112,7 +114,7 @@ type PlayerId = Int
 data GameState = GameState {
                     players :: [Player],
                     -- | all the cards still in play.
-                    cards   :: M.Map Card Int,
+                    cards   :: M.Map CardWrap Int,
                     -- | round number
                     roundNum   :: Int,
                     verbose :: Bool
@@ -120,7 +122,7 @@ data GameState = GameState {
 
 instance Show GameState where
   show gs = "GameState {players: " ++ show (players gs)
-            ++ ", cards: " ++ show (M.mapKeys name (cards gs))
+            ++ ", cards: " ++ show (M.mapKeys show (cards gs))
             ++ ", round: " ++ show (roundNum gs)
             ++ ", verbose: " ++ show (verbose gs) ++ "}"
 
@@ -139,23 +141,39 @@ data CardType = Action
               | Duration
               deriving (Show, Eq, Ord)
 
-data Card = Card {
-              name      :: String,
-              cost      :: Int,
-              coinValue :: Int,
-              types     :: [CardType],
-              setup     :: Virtual,
-              effect    :: Virtual,
-              tearDown  :: Virtual
-}
+class Card a where
+  name      :: a -> String
+  cost      :: a -> Int
+  coinValue :: a -> Int
+  types     :: a -> [CardType]
+  setup     :: a -> Virtual
+  setup _ = mempty
+  effect    :: a -> Virtual
+  effect _ = mempty
+  tearDown  :: a -> Virtual
+  tearDown _ = mempty
 
-instance Show Card where
-  show c = show (name c)
+data CardWrap = forall a . (Show a, Card a) => CardWrap a
 
-instance Ord Card where
+instance Card CardWrap where
+  name (CardWrap c) = name c
+  cost (CardWrap c) = cost c
+  coinValue (CardWrap c) = coinValue c
+  types (CardWrap c) = types c
+  setup (CardWrap c) = setup c
+  effect (CardWrap c) = effect c
+  tearDown (CardWrap c) = tearDown c
+
+instance Show CardWrap where
+  show (CardWrap c) = show c 
+
+instance Card a => Show a where
+   show c = name c
+
+instance Card a => Ord a where
   c1 `compare` c2 = (name c1) `compare` (name c2)
 
-instance Eq Card where
+instance Card a => Eq a where
   c1 == c2 = (name c1) == (name c2)
 
 class Playable a where 
@@ -191,7 +209,7 @@ instance Playable Virtual where
   play pid (Virtual f _) = f pid
   points pid (Virtual _ f) = f pid
 
-instance Playable Card where
+instance Card a => Playable a where
   play pid card = play pid (setup card <> effect card <> tearDown card) 
   points pid card = points pid (effect card)
 
@@ -216,7 +234,7 @@ data Option =
             -- | A list of cards that you definitely want in the game.
             -- Useful if you are testing a strategy that relies on
             -- a particular card.
-            | Cards [Card]
+            | Cards [CardWrap]
             deriving (Show)
 
 -- | Each `PlayerResult` is a tuple of a player and their final score.
