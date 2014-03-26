@@ -4,6 +4,7 @@ module Dominion.Types (
 import           Control.Monad.State
 import qualified Data.Map.Lazy as M
 import           Data.Monoid
+import           Control.Monad.Trans.Maybe
 ---------------------------
 -- CARD
 ---------------------------
@@ -143,7 +144,9 @@ data Card = Card {
               cost      :: Int,
               coinValue :: Int,
               types     :: [CardType],
-              effect    :: Virtual
+              setup     :: Virtual,
+              effect    :: Virtual,
+              tearDown  :: Virtual
 }
 
 instance Show Card where
@@ -176,8 +179,10 @@ virtual = Virtual (const $ return Nothing) (const $ return 0)
 
 instance Monoid Virtual where
   mempty = virtual
-  v1 `mappend` v2 = Virtual {playFunction = \pid -> do playFunction v1 pid
-                                                       playFunction v2 pid
+  v1 `mappend` v2 = Virtual {playFunction = \pid -> do r1 <- playFunction v1 pid
+                                                       case r1 of
+                                                          Just x -> return $ Just x
+                                                          Nothing -> playFunction v2 pid
                             ,pointsFunction = \pid -> do pointsFunction v1 pid
                                                          pointsFunction v2 pid
                             }
@@ -187,7 +192,7 @@ instance Playable Virtual where
   points pid (Virtual _ f) = f pid
 
 instance Playable Card where
-  play pid card = play pid (effect card) 
+  play pid card = play pid (setup card <> effect card <> tearDown card) 
   points pid card = points pid (effect card)
 
 -- | Given a playerId, run some actions for this player. Example:

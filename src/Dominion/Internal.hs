@@ -15,6 +15,7 @@ import           Data.List
 import           Data.Map.Lazy       ((!))
 import qualified Data.Map.Lazy       as M
 import           Data.Maybe
+import           Data.Monoid
 import           Data.Ord
 import qualified Dominion.Types      as T
 import           Dominion.Utils
@@ -216,10 +217,11 @@ validateBuy playerId card = do
     state <- get
     player <- getPlayer playerId
     cardGone <- pileEmpty card
-    return $ do
-      failIf (money < (T.cost card)) $ printf "Not enough money. You have %d but this card costs %d" money (T.cost card)
-      failIf cardGone $ printf "We've run out of that card (%s)" (T.name card)
-      failIf ((T.buys player) < 1) "You don't have any buys remaining!"
+    return . getFirst . mconcat . map First $
+      [failIf (money < (T.cost card)) $ printf "Not enough money. You have %d but this card costs %d" money (T.cost card)
+      ,failIf cardGone $ printf "We've run out of that card (%s)" (T.name card)
+      ,failIf ((T.buys player) < 1) "You don't have any buys remaining!"
+      ]
 
 -- | Check that this player is able to play this card. Returns
 -- a `Right` if they can play the card, otherwise returns a `Left` with
@@ -227,10 +229,12 @@ validateBuy playerId card = do
 validatePlay :: T.PlayerId -> T.Card -> T.Dominion T.PlayResult
 validatePlay playerId card = do
     player <- getPlayer playerId
-    return $ do
-      failIf (T.actions player < 1) "You don't have any actions remaining!"
-      failIf (card `notElem` (T.hand player)) $ printf
+    log playerId $ printf "validating that %s has a %s" (T.playerName player) (T.name card)
+    return . getFirst . mconcat . map First $
+      [failIf (T.actions player < 1) "You don't have any actions remaining!"
+      ,failIf (card `notElem` (T.hand player)) $ printf
         "You can't play a %s because you don't have it in your hand!" (T.name card)
+      ]
 
 -- Discard this player's hand.
 discardHand :: T.PlayerId -> T.Dominion ()
@@ -464,6 +468,35 @@ noop = T.virtual
 vpValue :: Int -> T.Virtual
 vpValue n = noop{T.pointsFunction=const $ return n }
 
+validator :: T.Card -> T.Virtual
+validator card = noop{T.playFunction = \pid -> do result <- validatePlay pid card
+                                                  case result of
+                                                    Just x -> return (Just x)
+                                                    Nothing -> do log pid $ printf "plays a %s!" (T.name card)
+                                                                  return Nothing
+                     }
+
+trasher :: T.Card -> T.Virtual
+trasher card = noop{T.playFunction = \pid -> do trashesCard pid card 
+                                                return Nothing
+                   }
+
+discarder :: T.Card -> T.Virtual
+discarder card = noop{T.playFunction = \pid -> do discardsCard pid card 
+                                                  return Nothing
+                     }
+
+plusCards :: Int -> T.Virtual
 plusCards n = noop{T.playFunction = \pid -> do drawFromDeck pid n
                                                return Nothing
                   }
+
+mkCard :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
+mkCard name cost worth types effects = 
+    let card = T.Card name cost worth types (validator card) effects (discarder card)
+    in card
+
+mkCardToTrash :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
+mkCardToTrash name cost worth types effects = 
+    let card = T.Card name cost worth types (validator card) effects (trasher card)
+    in card

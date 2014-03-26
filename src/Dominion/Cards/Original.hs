@@ -6,6 +6,7 @@ module Dominion.Cards.Original (
 ) where
 import Dominion.Types
 import Dominion.Internal
+import Data.Monoid
 
 {-adventurer  = Card "Adventurer" 6 [Action] [AdventurerEffect]
 bureaucrat  = Card "Bureaucrat" 4 [Action, Attack] [BureaucratEffect]
@@ -84,7 +85,7 @@ gardens     = Card "Gardens" 4 [Victory] [GardensEffect]
 originalCards = [adventurer ,
                  bureaucrat ,
                  cellar     ,
-                 chancellor ,
+                 chancellor ,s
                  chapel     ,
                  councilRoom,
                  feast      ,
@@ -108,6 +109,7 @@ originalCards = [adventurer ,
                  gardens    ]
                  -}
 -- smithy      = Card "Smithy" 4 [Action] [PlusCard 3]
-smithy = Card "Smithy" 4 0 [Action] (plusCards 3)
+
+smithy = mkCard "Smithy" 4 0 [Action] (plusCards 3)
 
 originalCards = [smithy]                

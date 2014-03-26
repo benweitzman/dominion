@@ -165,17 +165,11 @@ playsByPreference playerId cards = do
 -- Here's another example:
 --
 -- > playerId `plays` throneRoom `with` (ThroneRoom market)
-plays :: T.PlayerId -> T.Card -> T.Dominion T.PlayResult
-playerId `plays` card = do
-    validation <- validatePlay playerId card
-    case validation of
-      Just x -> return $ Just x
-      Nothing -> do log playerId $ printf "plays a %s!" (T.name card)
-                    result <- T.play playerId card
-                    modifyPlayer playerId (\p -> p{T.actions = T.actions p - 1})
-                    if trashThisCard card
-                      then playerId `trashesCard` card
-                      else playerId `discardsCard` card
-                    -- we should get at most *one* effect to return
-                    return $ Nothing
+plays :: T.Playable a => T.PlayerId -> a -> T.Dominion T.PlayResult
+playerId `plays` card = do 
+    result <- T.play playerId card
+    case result of 
+        Just x -> return (Just x)
+        Nothing -> do modifyPlayer playerId (\p -> p{T.actions = T.actions p - 1})
+                      return $ Nothing
 
