@@ -1,13 +1,15 @@
 module Dominion.Cards.Base where
 import Dominion.Types
-copper   = Card "Copper" 0 [Treasure] [CoinValue 1]
-silver   = Card "Silver" 3 [Treasure] [CoinValue 2]
-gold     = Card "Gold" 6 [Treasure] [CoinValue 3]
+import Dominion.Internal
 
-estate   = Card "Estate" 2 [Victory] [VPValue 1]
-duchy    = Card "Duchy" 5 [Victory] [VPValue 3]
-province = Card "Province" 8 [Victory] [VPValue 6]
-curse    = Card "Curse" 0 [Victory] [VPValue (-1)]
+copper   = Card "Copper" 0 1 [Treasure] noop
+silver   = Card "Silver" 3 2 [Treasure] noop
+gold     = Card "Gold" 6 3 [Treasure] noop
+
+estate   = Card "Estate" 2 0 [Victory] (vpValue 1)
+duchy    = Card "Duchy" 5 0 [Victory] (vpValue 3)
+province = Card "Province" 8 0 [Victory] (vpValue 6)
+curse    = Card "Curse" 0 0 [Victory] (vpValue (-1))
 
 treasureCards = [copper, silver, gold]
 victoryCards = [estate, duchy, province, curse]

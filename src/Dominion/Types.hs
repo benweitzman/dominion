@@ -1,36 +1,14 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Dominion.Types (
-  -- | This module uses the `Lens` library. So you might notice that the
-  -- fields for the constructors look strange: they all have underscores.
-  -- Given a card, you can see the cost like this:
-  --
-  -- > _cost card
-  --
-  -- But you can also use a lens:
-  --
-  -- > card ^. cost
-  --
-  -- The lens library is very useful for modifying deeply nested data
-  -- structures, and it's been very useful for this module.
   module Dominion.Types
 ) where
-import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map.Lazy as M
+import           Data.Monoid
 ---------------------------
 -- CARD
 ---------------------------
 
-data CardType = Action
-              | Attack
-              | Reaction
-              | Treasure
-              | Victory
-              | Duration
-              deriving (Show, Eq, Ord)
-
-data CardEffect = CoinValue Int
+{- data CardEffect = CoinValue Int
                 | VPValue Int
                 | PlusCard Int
                 | PlusCoin Int
@@ -66,7 +44,7 @@ data Card = Card {
               _cardType :: [CardType],
               _effects  :: [CardEffect]
 } deriving (Show, Eq, Ord)
-makeLenses ''Card
+makeLenses ''Card 
 
 -- | Used with the `thief` card.
 data ThiefTrashAction = TrashOnly Card | GainTrashedCard Card
@@ -101,24 +79,23 @@ data FollowupAction = ThroneRoom Card
                     -- player in the game.
                     | Thief ([Card] -> ThiefTrashAction)
                     -- | Takes the card you want to gain.
-                    | Workshop Card
+                    | Workshop Card -}
 
 ---------------------------
 -- PLAYER
 ---------------------------
 
 data Player = Player {
-                _playerName :: String,
-                _deck       :: [Card],
-                _discard    :: [Card],
-                _hand       :: [Card],
-                _actions    :: Int,
-                _buys       :: Int,
+                playerName :: String,
+                deck       :: [Card],
+                discard    :: [Card],
+                hand       :: [Card],
+                actions    :: Int,
+                buys       :: Int,
                 -- | Extra money gained from an action card (like +1 money
                 -- from market).
-                _extraMoney :: Int
+                extraMoney :: Int
 } deriving Show
-makeLenses ''Player
 
 type PlayerId = Int
 
@@ -130,26 +107,88 @@ type PlayerId = Int
 -- Get the round number like this:
 --
 -- > state <- get
--- > let roundNum = state ^. round
+-- > let roundNum = round state
 data GameState = GameState {
-                    _players :: [Player],
+                    players :: [Player],
                     -- | all the cards still in play.
-                    _cards   :: M.Map Card Int,
+                    cards   :: M.Map Card Int,
                     -- | round number
-                    _round   :: Int,
-                    _verbose :: Bool
+                    roundNum   :: Int,
+                    verbose :: Bool
 } 
-makeLenses ''GameState
 
 instance Show GameState where
-  show gs = "GameState {players: " ++ show (_players gs)
-            ++ ", cards: " ++ show (M.mapKeys _name (_cards gs))
-            ++ ", round: " ++ show (_round gs)
-            ++ ", verbose: " ++ show (_verbose gs) ++ "}"
+  show gs = "GameState {players: " ++ show (players gs)
+            ++ ", cards: " ++ show (M.mapKeys name (cards gs))
+            ++ ", round: " ++ show (roundNum gs)
+            ++ ", verbose: " ++ show (verbose gs) ++ "}"
 
 -- The Dominion monad is just the `StateT` monad that has a `GameState`
 -- plus the IO monad.
 type Dominion a = StateT GameState IO a
+
+---------------------------
+-- CARD
+---------------------------
+data CardType = Action
+              | Attack
+              | Reaction
+              | Treasure
+              | Victory
+              | Duration
+              deriving (Show, Eq, Ord)
+
+data Card = Card {
+              name      :: String,
+              cost      :: Int,
+              coinValue :: Int,
+              types     :: [CardType],
+              effect    :: Virtual
+}
+
+instance Show Card where
+  show c = show (name c)
+
+instance Ord Card where
+  c1 `compare` c2 = (name c1) `compare` (name c2)
+
+instance Eq Card where
+  c1 == c2 = (name c1) == (name c2)
+
+class Playable a where 
+  play :: PlayerId -> a -> Dominion PlayResult
+  points :: PlayerId -> a -> Dominion Int
+  points _ _ = return 0
+
+--instance Playable Card_n where
+--play pid card = _|_
+--player `plays` (card `with` followup)
+
+class Effectful a where
+  with :: (Effectful a, Playable b) => a -> b -> Virtual
+
+data Virtual = Virtual {playFunction :: PlayerId -> Dominion PlayResult
+                       ,pointsFunction :: PlayerId -> Dominion Int
+                       }
+
+virtual :: Virtual
+virtual = Virtual (const $ return Nothing) (const $ return 0)
+
+instance Monoid Virtual where
+  mempty = virtual
+  v1 `mappend` v2 = Virtual {playFunction = \pid -> do playFunction v1 pid
+                                                       playFunction v2 pid
+                            ,pointsFunction = \pid -> do pointsFunction v1 pid
+                                                         pointsFunction v2 pid
+                            }
+
+instance Playable Virtual where
+  play pid (Virtual f _) = f pid
+  points pid (Virtual _ f) = f pid
+
+instance Playable Card where
+  play pid card = play pid (effect card) 
+  points pid card = points pid (effect card)
 
 -- | Given a playerId, run some actions for this player. Example:
 --
@@ -159,11 +198,7 @@ type Strategy = PlayerId -> Dominion ()
 -- | When you use a card (either you play it or you buy something),
 -- you get a `PlayResult`. A `PlayResult` is either a `Left` with an error message,
 -- or a `Right` with a value.
-type PlayResult a = Either String a
-
--- | When you play an action card that needs a decision on your part,
--- `plays` will return a Followup.
-type Followup = (PlayerId, CardEffect)
+type PlayResult = Maybe String
 
 -- | You can set these options if you use `dominionWithOpts`. Example:
 --

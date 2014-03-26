@@ -37,9 +37,13 @@ indices arr = [0..(length arr - 1)]
 
 join = intercalate
 
-failIf :: Bool -> String -> Either String ()
-failIf True str = Left str
-failIf False str = Right ()
+failIf :: Bool -> String -> Maybe String
+failIf True str = Just str
+failIf False str = Nothing
+
+maybeToBool :: Maybe a -> Bool
+maybeToBool (Just _) = False
+maybeToBool Nothing = True
 
 -- | rotate a list
 --
@@ -55,3 +59,17 @@ rotate n xs = drop n' xs ++ take n' xs
 
 decrement :: Ord a => a -> M.Map a Int -> M.Map a Int
 decrement = M.adjust (\x -> x - 1)
+
+modifyListElem :: Eq a => a -> (a -> a) -> [a] -> [a]
+modifyListElem x = modifyListElemBy (== x)
+
+modifyListElemBy :: (a -> Bool) -> (a -> a) -> [a] -> [a]
+modifyListElemBy _ _ [] = []
+modifyListElemBy e f (x:xs)
+    | e x == True = f x:xs
+    | otherwise = x:modifyListElemBy e f xs
+
+modifyListIndex :: Int -> (a -> a) -> [a] -> [a]
+modifyListIndex _ _ [] = []
+modifyListIndex 0 f (x:xs) = f x:xs
+modifyListIndex n f (x:xs) = x:modifyListIndex (n-1) f xs

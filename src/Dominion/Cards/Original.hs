@@ -5,8 +5,9 @@ module Dominion.Cards.Original (
   module Dominion.Cards.Original                             
 ) where
 import Dominion.Types
+import Dominion.Internal
 
-adventurer  = Card "Adventurer" 6 [Action] [AdventurerEffect]
+{-adventurer  = Card "Adventurer" 6 [Action] [AdventurerEffect]
 bureaucrat  = Card "Bureaucrat" 4 [Action, Attack] [BureaucratEffect]
 
 -- | 
@@ -105,3 +106,8 @@ originalCards = [adventurer ,
                  woodcutter ,
                  workshop   ,
                  gardens    ]
+                 -}
+-- smithy      = Card "Smithy" 4 [Action] [PlusCard 3]
+smithy = Card "Smithy" 4 0 [Action] (plusCards 3)
+
+originalCards = [smithy]                
