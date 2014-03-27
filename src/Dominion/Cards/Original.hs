@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, OverlappingInstances, UndecidableInstances, MultiParamTypeClasses #-}
 module Dominion.Cards.Original (
   -- | Playing a card is easy:
   --
@@ -64,9 +65,6 @@ spy         = Card "Spy" 4 [Action, Attack] [PlusCard 1, PlusAction 1, SpyEffect
 -- > playerId `plays` thief `with` (Thief (GainTrashedCard . sortBy (comparing coinValue)))
 thief       = Card "Thief" 4 [Action, Attack] [ThiefEffect]
 
--- | 
--- > playerId `plays` throneRoom `with` (ThroneRoom market)
-throneRoom  = Card "Throne Room" 4 [Action] [PlayActionCard 2]
 witch       = Card "Witch" 5 [Action, Attack] [PlusCard 2, OthersGainCurse 1]
 
 -- | 
@@ -75,12 +73,6 @@ workshop    = Card "Workshop" 3 [Action] [GainCardUpto 4]
 gardens     = Card "Gardens" 4 [Victory] [GardensEffect]
 -}
 
-{-
-festival    = Card "Festival" 5 [Action] [PlusAction 2, PlusCoin 2, PlusBuy 1]
-laboratory  = Card "Laboratory" 5 [Action] [PlusCard 2, PlusAction 1]
-market      = Card "Market" 5 [Action] [PlusAction 1, PlusCoin 1, PlusCard 1, PlusBuy 1]
-moat        = Card "Moat" 2 [Action, Reaction] [PlusCard 2]
--}
 data Festival = Festival
 festival = mkCard Festival
 instance Card Festival where
@@ -127,6 +119,25 @@ instance Card Moat where
     effect _ = plusCards 2
     tearDown _ = discarder moat
 
+data ThroneRoom = ThroneRoom
+throneroom = mkCard ThroneRoom
+instance Card ThroneRoom where
+    name _ = "ThroneRoom"
+    cost _ = 4
+    coinValue _ = 0
+    types _ = [Action]
+    setup _= validator throneroom
+    tearDown _ = discarder throneroom
+
+instance Effectful ThroneRoom CardWrap where
+    throneRoom `with` card = setup throneRoom <> setup card <> effect card <> effect card <> tearDown card <> tearDown throneRoom
+
+-- TODO need to move the setup/teardown into playable so that the first play doesn't inihibit the second play
+instance Playable a => Effectful ThroneRoom a where
+    throneRoom `with` playable = setup throneRoom <> mkAction (\pid -> do play pid playable
+                                                                          play pid playable)
+                                                  <> tearDown throneRoom
+
 data Smithy = Smithy 
 smithy = mkCard Smithy
 instance Card Smithy where
@@ -161,4 +172,5 @@ instance Card Woodcutter where
     tearDown _ = discarder woodcutter
 
 
-originalCards = [smithy, village, woodcutter]                
+
+originalCards = [smithy, throneroom, village, woodcutter]                

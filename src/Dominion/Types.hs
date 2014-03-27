@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, FlexibleInstances, OverlappingInstances, UndecidableInstances #-}
+{-# LANGUAGE ExistentialQuantification, FlexibleInstances, OverlappingInstances, UndecidableInstances, MultiParamTypeClasses #-}
 
 module Dominion.Types (
   module Dominion.Types
@@ -189,8 +189,8 @@ class Playable a where
 --play pid card = _|_
 --player `plays` (card `with` followup)
 
-class Effectful a where
-  with :: (Effectful a, Playable b) => a -> b -> Virtual
+class Effectful a b where
+  with :: (Effectful a b, Playable b) => a -> b -> Virtual
 
 data Virtual = Virtual {playFunction :: PlayerId -> Dominion PlayResult
                        ,pointsFunction :: PlayerId -> Dominion Int
