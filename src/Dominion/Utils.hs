@@ -15,6 +15,21 @@ blue = highlight [Foreground Blue]
 cyan = highlight [Foreground Cyan]
 dim = highlight [Dim]
 
+every :: Int -> [a] -> [a]
+every n xs = case drop (n-1) xs of
+              (y:ys) -> y : every n ys
+              [] -> []
+
+printGraph :: (Int, Int) -> [Int] -> IO ()
+printGraph (width, height) values = mapM_ putStrLn . (transpose . map reverse) $ rows
+    where n = length values
+          yDiff = maximum values - minimum values      
+          sampleRate = max 1 $ n `div` width
+          samples = every sampleRate values 
+          rows = map toRow samples
+          toRow x = replicate (fill x - 1) ' ' ++ "*" ++ replicate (height - fill x) ' '
+          fill x = ((x - minimum values) * height) `div` yDiff
+
 count :: Eq a => a -> [a] -> Int
 count x list = length $ filter (==x) list
 
@@ -28,6 +43,15 @@ deckShuffle deck = do
     let (shuffled, newGen) = sampleState (shuffle deck) gen
     setStdGen newGen
     return shuffled
+
+fst3 :: (a, b, c) -> a
+fst3 (a, _, _) = a
+
+snd3 :: (a, b, c) -> b
+snd3 (_, b, _) = b
+
+trd :: (a, b, c) -> c
+trd (_, _, c) = c
 
 -- times :: Monad m => Int -> m a -> [m b]
 times iterations block = forM_ [1..iterations] $ const block
@@ -56,6 +80,10 @@ maybeToBool Nothing = True
 rotate :: Int -> [a] -> [a]
 rotate n xs = drop n' xs ++ take n' xs
   where n' = n `mod` length xs
+
+collate :: Ord a => [M.Map a Int] -> M.Map a [Int]
+collate [] = M.fromList []
+collate maps@(m:_) = M.fromList $ map (\k -> (k, map (M.! k) maps)) (M.keys m)
 
 decrement :: Ord a => a -> M.Map a Int -> M.Map a Int
 decrement = M.adjust (\x -> x - 1)

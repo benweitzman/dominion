@@ -12,8 +12,8 @@ import           Control.Lens        hiding (has, indices)
 import           Control.Monad       (liftM)
 import           Control.Monad.State hiding (state)
 import           Data.List
-import           Data.Map.Lazy       ((!))
-import qualified Data.Map.Lazy       as M
+import           Data.Map.Lazy     ((!))
+import qualified Data.Map.Lazy     as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Ord
@@ -142,7 +142,7 @@ playTurn playerId strategy = do
     roundNum <- getRound
     when (roundNum == 1) $ setupForTurn playerId
     player <- getPlayer playerId
-    log playerId $ "player's hand has: " ++ (show . map T.name $ T.hand player)
+    log playerId $ "player's hand has: " ++ (show $ T.hand player)
     strategy playerId
     discardHand playerId
     -- we draw from deck *after* to set up the next hand NOW,
@@ -158,21 +158,20 @@ isReaction card = T.Reaction `elem` (T.types card)
 isTreasure card = T.Treasure `elem` (T.types card)
 isVictory card = T.Victory `elem` (T.types card)
 
-{- countPoints :: T.PlayerId -> Dominion Int
-countPoints playerId = sum $ map countValue effects
-    where cards        = player ^. T.deck ++ player ^. T.discard ++ player ^. T.hand
-          victoryCards = filter isVictory cards
-          effects      = concatMap T.types victoryCards
-          countValue (T.VPValue x) = x
-          countValue (T.GardensEffect) = length cards `div` 10
-          countValue _ = 0 -}
-
 countPoints :: T.PlayerId -> T.Dominion Int
 countPoints playerId = do
   player <- getPlayer playerId
   let cards = concat $ [T.deck, T.discard, T.hand] <*> pure player
   foldM (\accum card -> do x <- T.points playerId card
                            return (x + accum)) 0 cards
+
+collectStats :: T.Dominion T.GameStats
+collectStats = do
+  state <- get
+  let ids = indices $ T.players state
+  vps <- mapM (\x -> do points <- countPoints x
+                        return (x, points)) ids 
+  return T.GameStats{T.victoryPoints=M.fromList vps}
 
 -- | Get player from game state specified by this id.
 -- This is useful sometimes:
@@ -229,7 +228,6 @@ validateBuy playerId card = do
 validatePlay :: T.PlayerId -> T.CardWrap -> T.Dominion T.PlayResult
 validatePlay playerId card = do
     player <- getPlayer playerId
-    log playerId $ printf "validating that %s has a %s" (T.playerName player) (T.name card)
     return . getFirst . mconcat . map First $
       [failIf (T.actions player < 1) "You don't have any actions remaining!"
       ,failIf (card `notElem` (T.hand player)) $ printf
@@ -274,10 +272,6 @@ drawsUntil_ alreadyDrawn playerId func = do
     if stopDrawing
       then return cards
       else drawsUntil_ cards playerId func
-
--- Does this card say you trash it when you play it?
-trashThisCard :: T.Card a => a->  Bool
-trashThisCard card = False --T.TrashThisCard `elem` (card ^. T.effects)
 
 -- | Player trashes the given card.
 trashesCard :: T.PlayerId -> T.CardWrap -> T.Dominion ()
@@ -476,20 +470,38 @@ validator card = noop{T.playFunction = \pid -> do result <- validatePlay pid car
                                                                   return Nothing
                      }
 
+mkAction :: (T.PlayerId -> T.Dominion a) -> T.Virtual
+mkAction action = noop{T.playFunction = \pid -> do action pid
+                                                   return Nothing
+                      }
+
 trasher :: T.CardWrap -> T.Virtual
-trasher card = noop{T.playFunction = \pid -> do trashesCard pid card 
-                                                return Nothing
-                   }
+trasher card = mkAction $ \pid -> do log pid ("trashes a " ++ show card)
+                                     trashesCard pid card 
 
 discarder :: T.CardWrap -> T.Virtual
-discarder card = noop{T.playFunction = \pid -> do discardsCard pid card 
-                                                  return Nothing
-                     }
+discarder card = mkAction $ \pid -> discardsCard pid card 
 
 plusCards :: Int -> T.Virtual
-plusCards n = noop{T.playFunction = \pid -> do drawFromDeck pid n
-                                               return Nothing
-                  }
+plusCards n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " cards")
+                                    cards <- drawFromDeck pid n
+                                    log pid ("drew " ++ show cards)
+
+plusActions :: Int -> T.Virtual
+plusActions n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " actions")
+                                      modifyPlayer pid $ \p -> p{T.actions=T.actions p + n}
+
+plusCoins :: Int -> T.Virtual
+plusCoins n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " coins")
+                                    modifyPlayer pid $ \p -> p{T.extraMoney=T.extraMoney p + n}
+
+plusBuys :: Int -> T.Virtual
+plusBuys n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " buys")
+                                   modifyPlayer pid $ \p -> p{T.buys=T.buys p + n}
+
+mkCard :: T.Card a => a -> T.CardWrap
+mkCard = T.CardWrap
+
 
 {--mkCard :: String -> Int -> Int -> [T.CardType] -> T.Virtual -> T.Card
 mkCard name cost worth types effects = 

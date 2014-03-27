@@ -20,6 +20,15 @@ bigMoney2 playerId = do
         then playerId `buysByPreference` [province, gold, silver]
         else playerId `buysByPreference` [province, gold, duchy, silver, estate]
 
+villageSmithy playerId = do
+    playerId `playsByPreference` [village, smithy]
+    roundNum <- getRound
+    if (roundNum < 6)
+        then playerId `buysByPreference` [province, gold, smithy, village, silver]
+        else playerId `buysByPreference` [province, gold, duchy, silver, estate]        
+
 -- | A strategy that should never win: buy only provinces and golds
 -- exclusively.
-stupidStrategy playerId = playerId `buysByPreference` [province, gold]
+stupidStrategy playerId = playerId `buysByPreference` [province, silver]
+
+justEstates playerId = playerId `buysByPreference` [estate]

@@ -106,6 +106,11 @@ type PlayerId = Int
 -- GAME STATE
 ---------------------------
 
+data GameStats = GameStats {
+  -- | playerId -> victory points
+  victoryPoints :: M.Map PlayerId Int
+}
+
 -- | This is what keeps track of all the state in the whole game.
 -- Get the round number like this:
 --
@@ -117,7 +122,9 @@ data GameState = GameState {
                     cards   :: M.Map CardWrap Int,
                     -- | round number
                     roundNum   :: Int,
-                    verbose :: Bool
+                    verbose :: Bool,
+                    -- | stats to track over the course of the game
+                    stats :: [GameStats]
 } 
 
 instance Show GameState where
@@ -153,7 +160,7 @@ class Card a where
   tearDown  :: a -> Virtual
   tearDown _ = mempty
 
-data CardWrap = forall a . (Show a, Card a) => CardWrap a
+data CardWrap = forall a . Card a => CardWrap a
 
 instance Card CardWrap where
   name (CardWrap c) = name c
@@ -163,9 +170,6 @@ instance Card CardWrap where
   setup (CardWrap c) = setup c
   effect (CardWrap c) = effect c
   tearDown (CardWrap c) = tearDown c
-
-instance Show CardWrap where
-  show (CardWrap c) = show c 
 
 instance Card a => Show a where
    show c = name c

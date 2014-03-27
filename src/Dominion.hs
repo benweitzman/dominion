@@ -10,7 +10,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State    hiding (join, state)
 import           Data.Either
 import           Data.List
-import qualified Data.Map.Lazy          as M
+import qualified Data.Map.Lazy        as M
 import           Data.Maybe
 import           Data.Ord
 import qualified Dominion.Cards         as CA
@@ -64,9 +64,9 @@ makeGameState options players = do
         cards         = M.fromList ([(CA.copper, 60), (CA.silver, 40), (CA.gold, 30),
                                     (CA.estate, 12), (CA.duchy, 12), (CA.province, 12)]
                                     ++ [(c, 10) | c <- actionCards])
-    return $ T.GameState players cards 1 verbose
+    return $ T.GameState players cards 1 verbose []
 
-gameOver :: M.Map T.Card Int -> Bool
+gameOver :: M.Map T.CardWrap Int -> Bool
 gameOver cards
     | cards M.! CA.province == 0 = True
     | M.size (M.filter (== 0) cards) >= 3 = True
@@ -84,7 +84,8 @@ run strategies = do
   cards <- T.cards <$> get
   if gameOver cards
     then returnResults
-    else do modify $ \s -> s{T.roundNum = T.roundNum s + 1}
+    else do stat <- collectStats
+            modify $ \s -> s{T.roundNum = T.roundNum s + 1,T.stats=T.stats s ++ [stat]}
             run strategies
 
 returnResults :: T.Dominion T.Result
@@ -93,16 +94,19 @@ returnResults = do
     let players = T.players state
     results <- zip players <$> forM (indices players) countPoints
     let winner  = T.playerName . fst $ maximumBy (comparing snd) results
+        stats = T.stats state
+        victoryPoints = collate (map T.victoryPoints stats)
     when (T.verbose state) $ do
       liftIO $ putStrLn "Game Over!"
-      forM_ results $ \(player, points) -> liftIO $ putStrLn $
-        printf "player %s got %d points" (T.playerName player) points
+      forM_ (zip (indices players) results) $ \(pid, (player, points)) -> liftIO $ do
+        putStrLn $ printf "player %s got %d points" (T.playerName player) points
+        printGraph (80, 20) (victoryPoints M.! pid)
     return $ T.Result results winner
 
 -- | Player buys a card. Example:
 --
 -- > playerId `buys` smithy
-buys :: T.PlayerId -> T.Card -> T.Dominion T.PlayResult
+buys :: T.PlayerId -> T.CardWrap -> T.Dominion T.PlayResult
 buys playerId card = do
     validation <- validateBuy playerId card
     case validation of
@@ -125,7 +129,7 @@ buys playerId card = do
 --
 -- And you have 16 money and two buys. You will buy two provinces.
 -- This runs all the same validations as `buys`.
-buysByPreference :: T.PlayerId -> [T.Card] -> T.Dominion ()
+buysByPreference :: T.PlayerId -> [T.CardWrap] -> T.Dominion ()
 buysByPreference playerId cards = do
     purchasableCards <- filterM (\card -> maybeToBool <$> validateBuy playerId card) cards
     unless (null purchasableCards) $ do
@@ -137,7 +141,7 @@ buysByPreference playerId cards = do
 -- Note: if any card requires a `Followup` (like `cellar` or
 -- `chapel`), you need to use `plays` instead. This runs all the same
 -- validations as `plays`.
-playsByPreference :: T.PlayerId -> [T.Card] -> T.Dominion ()
+playsByPreference :: T.PlayerId -> [T.CardWrap] -> T.Dominion ()
 playsByPreference playerId cards = do
     playableCards <- filterM (\card -> maybeToBool <$> validatePlay playerId card) cards
     unless (null playableCards) $ do
