@@ -162,7 +162,7 @@ countPoints :: T.PlayerId -> T.Dominion Int
 countPoints playerId = do
   player <- getPlayer playerId
   let cards = concat $ [T.deck, T.discard, T.hand] <*> pure player
-  foldM (\accum card -> do x <- T.points playerId card
+  foldM (\accum card -> do x <- T.points card playerId
                            return (x + accum)) 0 cards
 
 collectStats :: T.Dominion T.GameStats
@@ -456,46 +456,44 @@ gainCardUpTo playerId value card =
 -- Basic Card Actions
 ---------------------
 
-noop :: T.Virtual
-noop = T.virtual
+noop :: T.Dominion T.PlayResult
+noop = mempty
 
-vpValue :: Int -> T.Virtual
-vpValue n = noop{T.pointsFunction=const $ return n }
+vpValue :: Int -> (T.PlayerId -> T.Dominion Int)
+vpValue n = \pid -> return n
 
-validator :: T.CardWrap -> T.Virtual
-validator card = noop{T.playFunction = \pid -> do result <- validatePlay pid card
-                                                  case result of
-                                                    Just x -> return (Just x)
-                                                    Nothing -> do log pid $ printf "plays a %s!" (T.name card)
-                                                                  return Nothing
-                     }
+validator :: T.CardWrap -> (T.PlayerId -> T.Dominion T.PlayResult)
+validator card = \pid -> do result <- validatePlay pid card
+                            case result of
+                              Just x -> return (Just x)
+                              Nothing -> do log pid $ printf "plays a %s!" (T.name card) -- TODO this should be moved to effect
+                                            return Nothing
 
-mkAction :: (T.PlayerId -> T.Dominion a) -> T.Virtual
-mkAction action = noop{T.playFunction = \pid -> do action pid
-                                                   return Nothing
-                      }
+mkAction :: (T.PlayerId -> T.Dominion a) -> (T.PlayerId -> T.Dominion T.PlayResult)
+mkAction action = \pid -> do action pid
+                             return Nothing
 
-trasher :: T.CardWrap -> T.Virtual
+trasher :: T.CardWrap -> (T.PlayerId -> T.Dominion T.PlayResult)
 trasher card = mkAction $ \pid -> do log pid ("trashes a " ++ show card)
                                      trashesCard pid card 
 
-discarder :: T.CardWrap -> T.Virtual
+discarder :: T.CardWrap -> (T.PlayerId -> T.Dominion T.PlayResult)
 discarder card = mkAction $ \pid -> discardsCard pid card 
 
-plusCards :: Int -> T.Virtual
+plusCards :: Int -> (T.PlayerId -> T.Dominion T.PlayResult)
 plusCards n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " cards")
                                     cards <- drawFromDeck pid n
                                     log pid ("drew " ++ show cards)
 
-plusActions :: Int -> T.Virtual
+plusActions :: Int -> (T.PlayerId -> T.Dominion T.PlayResult)
 plusActions n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " actions")
                                       modifyPlayer pid $ \p -> p{T.actions=T.actions p + n}
 
-plusCoins :: Int -> T.Virtual
+plusCoins :: Int -> (T.PlayerId -> T.Dominion T.PlayResult)
 plusCoins n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " coins")
                                     modifyPlayer pid $ \p -> p{T.extraMoney=T.extraMoney p + n}
 
-plusBuys :: Int -> T.Virtual
+plusBuys :: Int -> (T.PlayerId -> T.Dominion T.PlayResult)
 plusBuys n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " buys")
                                    modifyPlayer pid $ \p -> p{T.buys=T.buys p + n}
 

@@ -5,16 +5,18 @@ module Dominion.Cards.Original (
   -- > playerId `plays` adventurer
   module Dominion.Cards.Original                             
 ) where
+
+import Control.Monad.State hiding (state)
 import Dominion.Types
 import Dominion.Internal
 import Data.Monoid
 
-{-adventurer  = Card "Adventurer" 6 [Action] [AdventurerEffect]
-bureaucrat  = Card "Bureaucrat" 4 [Action, Attack] [BureaucratEffect]
+{-adventurer  = Card "Adventurer" 6 [Action] [AdventurergetEffect]
+bureaucrat  = Card "Bureaucrat" 4 [Action, Attack] [BureaucratgetEffect]
 
 -- | 
 -- > playerId `plays` cellar `with` (Cellar [list of cards to discard])
-cellar      = Card "Cellar" 2 [Action] [PlusAction 1, CellarEffect]
+cellar      = Card "Cellar" 2 [Action] [PlusAction 1, CellargetEffect]
 
 -- > To move your deck into the discard pile:
 --
@@ -23,7 +25,7 @@ cellar      = Card "Cellar" 2 [Action] [PlusAction 1, CellarEffect]
 -- If you don't want to, you don't have to use the followup action at all:
 --
 -- > playerId `plays` chancellor
-chancellor  = Card "Chancellor" 3 [Action] [PlusCoin 2, ChancellorEffect]
+chancellor  = Card "Chancellor" 3 [Action] [PlusCoin 2, ChancellorgetEffect]
 
 -- | 
 -- > playerId `plays` chapel `with` (Chapel [list of cards to trash])
@@ -34,24 +36,24 @@ councilRoom = Card "Council Room" 5 [Action] [PlusCard 4, PlusBuy 1, OthersPlusC
 --
 -- > playerId `plays` feast `with` (Feast market)
 laboratory  = Card "Laboratory" 5 [Action] [PlusCard 2, PlusAction 1]
-library     = Card "Library" 5 [Action] [LibraryEffect]
+library     = Card "Library" 5 [Action] [LibrarygetEffect]
 militia     = Card "Militia" 4 [Action, Attack] [PlusCoin 2, OthersDiscardTo 3]
 
 -- | 
 -- > playerId `plays` mine `with` (Mine copper)
-mine        = Card "Mine" 5 [Action] [MineEffect]
-moneylender = Card "Moneylender" 4 [Action] [MoneylenderEffect]
+mine        = Card "Mine" 5 [Action] [MinegetEffect]
+moneylender = Card "Moneylender" 4 [Action] [MoneylendergetEffect]
 
 -- | To turn a gold into a province:
 --
 -- > playerId `plays` remodel `with` (Remodel (gold, province))
-remodel     = Card "Remodel" 4 [Action] [RemodelEffect]
+remodel     = Card "Remodel" 4 [Action] [RemodelgetEffect]
 
 -- | The `Spy` `FollowupAction` takes two lists: a list of cards you would
 -- discard for yourself, and a list of cards you would discard for others:
 --
 -- > playerId `plays` spy `with` ([estate, duchy, province], [silver, gold])
-spy         = Card "Spy" 4 [Action, Attack] [PlusCard 1, PlusAction 1, SpyEffect]
+spy         = Card "Spy" 4 [Action, Attack] [PlusCard 1, PlusAction 1, SpygetEffect]
 
                     -- gets a list of the treasure cards that the player
                     -- had. You return either TrashOnly to have the player
@@ -63,14 +65,14 @@ spy         = Card "Spy" 4 [Action, Attack] [PlusCard 1, PlusAction 1, SpyEffect
 -- card, or a `GainTrashedCard` to put it into your discard pile.
 --
 -- > playerId `plays` thief `with` (Thief (GainTrashedCard . sortBy (comparing coinValue)))
-thief       = Card "Thief" 4 [Action, Attack] [ThiefEffect]
+thief       = Card "Thief" 4 [Action, Attack] [ThiefgetEffect]
 
 witch       = Card "Witch" 5 [Action, Attack] [PlusCard 2, OthersGainCurse 1]
 
 -- | 
 -- > playerId `plays` workshop `with` (Workshop gardens)
 workshop    = Card "Workshop" 3 [Action] [GainCardUpto 4]
-gardens     = Card "Gardens" 4 [Victory] [GardensEffect]
+gardens     = Card "Gardens" 4 [Victory] [GardensgetEffect]
 -}
 
 data Festival = Festival
@@ -80,9 +82,9 @@ instance Card Festival where
     cost _ = 5
     coinValue _ = 0
     types _ = [Action]
-    setup _= validator festival
-    effect _ = plusActions 2 <> plusCoins 2 <> plusBuys 1
-    tearDown _ = discarder festival
+    getSetup _= validator festival
+    getEffect _ = plusActions 2 <> plusCoins 2 <> plusBuys 1
+    getTearDown _ = discarder festival
 
 data Laboratory = Laboratory
 laboratory = mkCard Laboratory
@@ -91,9 +93,9 @@ instance Card Laboratory where
     cost _ = 5
     coinValue _ = 0
     types _ = [Action]
-    setup _= validator laboratory
-    effect _ = plusCards 2 <> plusActions 2
-    tearDown _ = discarder laboratory
+    getSetup _= validator laboratory
+    getEffect _ = plusCards 2 <> plusActions 2
+    getTearDown _ = discarder laboratory
 
 data Market = Market
 market = mkCard Market
@@ -102,11 +104,9 @@ instance Card Market where
     cost _ = 5
     coinValue _ = 0
     types _ = [Action]
-    setup _= validator market
-    effect _ = plusActions 1 <> plusCoins 1 <> plusCards 1 <> plusBuys 1
-
-
-    tearDown _ = discarder market
+    getSetup _= validator market
+    getEffect _ = plusActions 1 <> plusCoins 1 <> plusCards 1 <> plusBuys 1
+    getTearDown _ = discarder market
 
 data Moat = Moat
 moat = mkCard Moat
@@ -115,9 +115,9 @@ instance Card Moat where
     cost _ = 2
     coinValue _ = 0
     types _ = [Action, Reaction]
-    setup _= validator moat
-    effect _ = plusCards 2
-    tearDown _ = discarder moat
+    getSetup _= validator moat
+    getEffect _ = plusCards 2
+    getTearDown _ = discarder moat
 
 data ThroneRoom = ThroneRoom
 throneroom = mkCard ThroneRoom
@@ -126,17 +126,21 @@ instance Card ThroneRoom where
     cost _ = 4
     coinValue _ = 0
     types _ = [Action]
-    setup _= validator throneroom
-    tearDown _ = discarder throneroom
+    getSetup _= validator throneroom
+    getTearDown _ = discarder throneroom
 
-instance Effectful ThroneRoom CardWrap where
-    throneRoom `with` card = setup throneRoom <> setup card <> effect card <> effect card <> tearDown card <> tearDown throneRoom
-
--- TODO need to move the setup/teardown into playable so that the first play doesn't inihibit the second play
 instance Playable a => Effectful ThroneRoom a where
-    throneRoom `with` playable = setup throneRoom <> mkAction (\pid -> do play pid playable
-                                                                          play pid playable)
-                                                  <> tearDown throneRoom
+    throneRoom `with` playable = Virtual { setupFunction = \pid -> do r1 <- getSetup throneRoom pid 
+                                                                      case r1 of
+                                                                        Nothing -> do state <- get
+                                                                                      getTearDown throneRoom pid
+                                                                                      r2 <- setup pid playable
+                                                                                      put state
+                                                                                      return r2
+                                                                        x -> return x
+                                         , effectFunction = \pid -> effect pid playable <> effect pid playable
+                                         , tearDownFunction = \pid -> getTearDown throneRoom pid <> tearDown pid playable
+                                         }
 
 data Smithy = Smithy 
 smithy = mkCard Smithy
@@ -145,9 +149,9 @@ instance Card Smithy where
     cost _ = 4
     coinValue _ = 0
     types _ = [Action]
-    setup _ = validator smithy
-    effect _ = plusCards 3
-    tearDown _ = discarder smithy
+    getSetup _ = validator smithy
+    getEffect _ = plusCards 3
+    getTearDown _ = discarder smithy
 
 data Village = Village
 village = mkCard Village
@@ -156,9 +160,9 @@ instance Card Village where
     cost _ = 3
     coinValue _ = 3
     types _ = [Action]
-    setup _= validator village
-    effect _ = plusCards 1 <> plusActions 2
-    tearDown _ = discarder village
+    getSetup _= validator village
+    getEffect _ = plusCards 1 <> plusActions 2
+    getTearDown _ = discarder village
 
 data Woodcutter = Woodcutter
 woodcutter = mkCard Woodcutter
@@ -167,9 +171,9 @@ instance Card Woodcutter where
     cost _ = 3
     coinValue _ = 0
     types _ = [Action]
-    setup _= validator woodcutter
-    effect _ = plusCoins 1 <> plusBuys 1
-    tearDown _ = discarder woodcutter
+    getSetup _= validator woodcutter
+    getEffect _ = plusCoins 1 <> plusBuys 1
+    getTearDown _ = discarder woodcutter
 
 
 

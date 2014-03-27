@@ -20,7 +20,6 @@ instance Card Copper where
     cost _ = 0
     coinValue _ = 1
     types _ = [Treasure]
-    setup _ = validator copper
 
 data Silver = Silver
 silver = mkCard Silver
@@ -28,8 +27,7 @@ instance Card Silver where
     name _ = "Silver"
     cost _ = 3
     coinValue _ = 2
-    types _ = [Treasure]
-    setup _ = validator silver
+    types _ = [Treasure] 
 
 data Gold = Gold
 gold = mkCard Gold
@@ -38,7 +36,6 @@ instance Card Gold where
     cost _ = 6
     coinValue _ = 3
     types _ = [Treasure]
-    setup _ = validator gold
 
 data Estate = Estate
 estate = mkCard Estate
@@ -47,8 +44,7 @@ instance Card Estate where
     cost _ = 2
     coinValue _ = 0
     types _ = [Victory]
-    effect _ = vpValue 1
-    setup _ = validator estate
+    points _ = vpValue 1
 
 data Duchy = Duchy
 duchy = mkCard Duchy
@@ -57,8 +53,7 @@ instance Card Duchy where
     cost _ = 5
     coinValue _ = 0
     types _ = [Victory]
-    effect _ = vpValue 3
-    setup _ = validator duchy
+    points _ = vpValue 3
 
 data Province = Province
 province = mkCard Province
@@ -67,8 +62,7 @@ instance Card Province where
     cost _ = 8
     coinValue _ = 0
     types _ = [Victory]
-    effect _ = vpValue 6
-    setup _ = validator province
+    points _ = vpValue 6
 
 data Curse = Curse 
 curse = mkCard Curse
@@ -77,9 +71,7 @@ instance Card Curse where
     cost _ = 0
     coinValue _ = 0
     types _ = [Victory]
-    effect _ = vpValue (-1)
-    setup _ = validator curse
-
+    points _ = vpValue (-1)
 
 treasureCards = [copper, silver, gold]
 victoryCards = [estate, duchy, province, curse]

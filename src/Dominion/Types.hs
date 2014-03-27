@@ -7,82 +7,8 @@ import           Control.Monad.State
 import qualified Data.Map.Lazy as M
 import           Data.Monoid
 import           Control.Monad.Trans.Maybe
----------------------------
--- CARD
----------------------------
-
-{- data CardEffect = CoinValue Int
-                | VPValue Int
-                | PlusCard Int
-                | PlusCoin Int
-                | PlusBuy Int
-                | PlusAction Int
-                | DurationDraw Int
-                | DurationAction Int
-                | DurationCoin Int
-                | DurationBuy Int
-                | TrashCards Int
-                | TrashThisCard
-                | GainCardUpto Int
-                | PlayActionCard Int
-                | AdventurerEffect
-                | BureaucratEffect
-                | CellarEffect
-                | ChancellorEffect
-                | GardensEffect
-                | LibraryEffect
-                | MineEffect
-                | MoneylenderEffect
-                | RemodelEffect
-                | SpyEffect
-                | ThiefEffect
-                | OthersPlusCard Int
-                | OthersDiscardTo Int
-                | OthersGainCurse Int
-                deriving (Show, Eq, Ord)
-
-data Card = Card {
-              _name     :: String,
-              _cost     :: Int,
-              _cardType :: [CardType],
-              _effects  :: [CardEffect]
-} deriving (Show, Eq, Ord)
-makeLenses ''Card 
-
--- | Used with the `thief` card.
-data ThiefTrashAction = TrashOnly Card | GainTrashedCard Card
-
--- | Some cards have a followup action associated with them. For example,
--- when you play a `workshop`, you need to choose what card you're going to
--- get. To use the followup action, you need to use the relevant data
--- constructor. See the documentation for each card to find out how to use
--- each type of `FollowupAction`.
-data FollowupAction = ThroneRoom Card
-                    -- | Takes a list of cards to discard.
-                    | Cellar [Card]
-                    -- | Boolean value representing whether you want to
-                    -- move your deck into the discard pile.
-                    | Chancellor Bool
-                    -- | Takes a list of cards to trash.
-                    | Chapel [Card]
-                    -- | Takes the card you want to gain.
-                    | Feast Card
-                    -- | Takes the card you want to trash.
-                    | Mine Card
-                    -- | The first card is the card you are trashing, the
-                    -- second card is the card you are gaining.
-                    | Remodel (Card, Card)
-                    -- | The first element is the list of cards you would discard for yourself,
-                    -- the second is the lsit of cards you want others to discard.
-                    | Spy ([Card], [Card])
-                    -- | The function gets a list of treasure cards.
-                    -- had. You return either `TrashOnly` to have the player
-                    -- trash a card, or `GainTrashedCard` to gain the trashed
-                    -- card. This function is called for every other
-                    -- player in the game.
-                    | Thief ([Card] -> ThiefTrashAction)
-                    -- | Takes the card you want to gain.
-                    | Workshop Card -}
+import           Prelude             hiding (log)
+import           Text.Printf
 
 ---------------------------
 -- PLAYER
@@ -153,12 +79,14 @@ class Card a where
   cost      :: a -> Int
   coinValue :: a -> Int
   types     :: a -> [CardType]
-  setup     :: a -> Virtual
-  setup _ = mempty
-  effect    :: a -> Virtual
-  effect _ = mempty
-  tearDown  :: a -> Virtual
-  tearDown _ = mempty
+  getSetup  :: a -> (PlayerId -> Dominion PlayResult)
+  getSetup _ = const mempty
+  getEffect    :: a -> (PlayerId -> Dominion PlayResult)
+  getEffect _ = const mempty
+  getTearDown :: a -> (PlayerId -> Dominion PlayResult)
+  getTearDown _ = const mempty
+  points :: a -> (PlayerId -> Dominion Int)
+  points _ = const $ return 0
 
 data CardWrap = forall a . Card a => CardWrap a
 
@@ -167,9 +95,10 @@ instance Card CardWrap where
   cost (CardWrap c) = cost c
   coinValue (CardWrap c) = coinValue c
   types (CardWrap c) = types c
-  setup (CardWrap c) = setup c
-  effect (CardWrap c) = effect c
-  tearDown (CardWrap c) = tearDown c
+  getSetup (CardWrap c) = getSetup c
+  getEffect (CardWrap c) = getEffect c
+  getTearDown (CardWrap c) = getTearDown c
+  points (CardWrap c) = points c
 
 instance Card a => Show a where
    show c = name c
@@ -180,42 +109,44 @@ instance Card a => Ord a where
 instance Card a => Eq a where
   c1 == c2 = (name c1) == (name c2)
 
-class Playable a where 
+class Playable a where
+  setup :: PlayerId -> a -> Dominion PlayResult
+  setup _ _ = return Nothing
+  effect :: PlayerId -> a -> Dominion PlayResult
+  effect _ _ = return Nothing
+  tearDown :: PlayerId -> a -> Dominion PlayResult
+  tearDown _ _ = return Nothing
   play :: PlayerId -> a -> Dominion PlayResult
-  points :: PlayerId -> a -> Dominion Int
-  points _ _ = return 0
+  play pid playable = mconcat $ map (($ playable) . ($ pid)) [setup, effect, tearDown]
 
 --instance Playable Card_n where
 --play pid card = _|_
 --player `plays` (card `with` followup)
 
+data Virtual = Virtual {setupFunction :: PlayerId -> Dominion PlayResult
+                       ,effectFunction :: PlayerId -> Dominion PlayResult
+                       ,tearDownFunction :: PlayerId -> Dominion PlayResult
+                       }
+
+instance Playable Virtual where
+  setup pid (Virtual s _ _) = s pid
+  effect pid (Virtual _ e _) = e pid
+  tearDown pid (Virtual _ _ t) = t pid
+
 class Effectful a b where
   with :: (Effectful a b, Playable b) => a -> b -> Virtual
 
-data Virtual = Virtual {playFunction :: PlayerId -> Dominion PlayResult
-                       ,pointsFunction :: PlayerId -> Dominion Int
-                       }
-
-virtual :: Virtual
-virtual = Virtual (const $ return Nothing) (const $ return 0)
-
-instance Monoid Virtual where
-  mempty = virtual
-  v1 `mappend` v2 = Virtual {playFunction = \pid -> do r1 <- playFunction v1 pid
-                                                       case r1 of
-                                                          Just x -> return $ Just x
-                                                          Nothing -> playFunction v2 pid
-                            ,pointsFunction = \pid -> do pointsFunction v1 pid
-                                                         pointsFunction v2 pid
-                            }
-
-instance Playable Virtual where
-  play pid (Virtual f _) = f pid
-  points pid (Virtual _ f) = f pid
+instance Monoid (Dominion PlayResult) where
+  mempty = return Nothing
+  d1 `mappend` d2 = do r <- d1
+                       case r of
+                         Nothing -> d2
+                         x -> return x                            
 
 instance Card a => Playable a where
-  play pid card = play pid (setup card <> effect card <> tearDown card) 
-  points pid card = points pid (effect card)
+  setup pid card = (getSetup card) pid
+  effect pid card = (getEffect card) pid
+  tearDown pid card = (getTearDown card) pid
 
 -- | Given a playerId, run some actions for this player. Example:
 --
