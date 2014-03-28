@@ -1,20 +1,23 @@
-{-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Dominion.Utils where
 import           Control.Arrow
 import           Control.Monad
 import           Control.Monad.Logger
 import           Control.Monad.State
+import qualified Data.ByteString.Char8          as S8
 import           Data.List
 import qualified Data.Map.Lazy                  as M
 import           Data.Ord
 import           Data.Random                    hiding (shuffle)
 import           Data.Random.Extras
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text as T
-import Data.Text.Format
-import Data.Text.Format.Params
+import qualified Data.Text                      as T
+import           Data.Text.Format
+import           Data.Text.Format.Params
+import qualified Data.Text.Lazy                 as TL
 import           Language.Haskell.HsColour.ANSI
+import           System.IO
+import           System.Log.FastLogger
 import           System.Random
 
 red = highlight [Foreground Red]
@@ -23,6 +26,27 @@ yellow = highlight [Foreground Yellow]
 blue = highlight [Foreground Blue]
 cyan = highlight [Foreground Cyan]
 dim = highlight [Dim]
+
+gatedOutput :: Handle
+            -> LogLevel
+            -> Loc
+            -> LogSource
+            -> LogLevel
+            -> LogStr
+            -> IO ()
+gatedOutput h minLevel loc src level msg =
+    when (level >= minLevel) $ S8.hPutStrLn h ls
+  where
+    ls = defaultLogStrBS loc src level msg
+
+defaultLogStrBS :: Loc
+                -> LogSource
+                -> LogLevel
+                -> LogStr
+                -> S8.ByteString
+defaultLogStrBS a b c d =
+    fromLogStr $ defaultLogStr a b c d
+
 
 every :: Int -> [a] -> [a]
 every n xs = case drop (n-1) xs of
@@ -37,17 +61,14 @@ printGraph dimmensions values = printMultiGraph dimmensions [(values, '*')]
 
 printMultiGraph :: (Int, Int) -> [([Int], Char)] -> LoggingT IO ()
 printMultiGraph _ [] = return ()
-printMultiGraph (width, height) sequences = do
-    $(logDebug) $ fmt "{}" [Shown sortedRows]
-    $(logDebug) $ fmt "{}" [Shown differenceRows]
-    liftIO $ mapM_ putStrLn . (transpose . map reverse) $ rows
+printMultiGraph (width, height) sequences = liftIO $ mapM_ putStrLn . transpose . map reverse $ rows
     where n = length . fst $ head sequences
-          trimmed = map (\(vs, c) -> (take n vs, c)) sequences
+          trimmed = map (first (take n)) sequences
           maxVal = maximum $ map (maximum . fst) trimmed
           minVal = minimum $ map (minimum . fst) trimmed
           yDiff = maxVal - minVal
           sampleRate = max 1 $ n `div` width
-          samples = map (first (\x -> every sampleRate x)) trimmed
+          samples = map (first (every sampleRate)) trimmed
           numSamples = length .fst $ head samples
           collatedSamples = map (\idx -> map (\(values, c) -> (values !! idx, c)) samples) [0..numSamples-1]
           sortedRows = map (sortBy (comparing fst)) collatedSamples :: [[(Int, Char)]]
@@ -125,7 +146,7 @@ modifyListElem x = modifyListElemBy (== x)
 modifyListElemBy :: (a -> Bool) -> (a -> a) -> [a] -> [a]
 modifyListElemBy _ _ [] = []
 modifyListElemBy e f (x:xs)
-    | e x == True = f x:xs
+    | e x = f x:xs
     | otherwise = x:modifyListElemBy e f xs
 
 modifyListIndex :: Int -> (a -> a) -> [a] -> [a]

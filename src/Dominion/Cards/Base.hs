@@ -1,8 +1,8 @@
 module Dominion.Cards.Base where
-import Dominion.Internal
-import Data.Monoid
+import           Data.Monoid
+import           Dominion.Internal
 
-{- 
+{-
 copper   = mkCard "Copper" 0 1 [Treasure] noop
 silver   = mkCard "Silver" 3 2 [Treasure] noop
 gold     = mkCard "Gold" 6 3 [Treasure] noop
@@ -26,7 +26,7 @@ instance Card Silver where
     name _ = "Silver"
     cost _ = 3
     coinValue _ = 2
-    types _ = [Treasure] 
+    types _ = [Treasure]
 
 data Gold = Gold
 gold = mkCard Gold
@@ -63,7 +63,7 @@ instance Card Province where
     types _ = [Victory]
     points _ = vpValue 6
 
-data Curse = Curse 
+data Curse = Curse
 curse = mkCard Curse
 instance Card Curse where
     name _ = "Curse"

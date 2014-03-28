@@ -1,20 +1,23 @@
-{-# LANGUAGE FlexibleInstances, OverlappingInstances, UndecidableInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverlappingInstances  #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module Dominion.Cards.Original (
   -- | Playing a card is easy:
   --
   -- > playerId `plays` adventurer
-  module Dominion.Cards.Original                             
+  module Dominion.Cards.Original
 ) where
 
-import Control.Monad.State hiding (state)
-import Dominion.Cards.Base
-import Dominion.Internal
-import Data.List
-import Data.Monoid
+import           Control.Monad.State hiding (state)
+import           Data.List
+import           Data.Monoid
+import           Dominion.Cards.Base
+import           Dominion.Internal
 
 {-
 
--- | 
+-- |
 -- > playerId `plays` chapel `with` (Chapel [list of cards to trash])
 chapel      = Card "Chapel" 2 [Action] [TrashCards 4]
 councilRoom = Card "Council Room" 5 [Action] [PlusCard 4, PlusBuy 1, OthersPlusCard 1]
@@ -26,7 +29,7 @@ laboratory  = Card "Laboratory" 5 [Action] [PlusCard 2, PlusAction 1]
 library     = Card "Library" 5 [Action] [LibrarygetEffect]
 militia     = Card "Militia" 4 [Action, Attack] [PlusCoin 2, OthersDiscardTo 3]
 
--- | 
+-- |
 -- > playerId `plays` mine `with` (Mine copper)
 mine        = Card "Mine" 5 [Action] [MinegetEffect]
 moneylender = Card "Moneylender" 4 [Action] [MoneylendergetEffect]
@@ -56,7 +59,7 @@ thief       = Card "Thief" 4 [Action, Attack] [ThiefgetEffect]
 
 witch       = Card "Witch" 5 [Action, Attack] [PlusCard 2, OthersGainCurse 1]
 
--- | 
+-- |
 -- > playerId `plays` workshop `with` (Workshop gardens)
 workshop    = Card "Workshop" 3 [Action] [GainCardUpto 4]
 gardens     = Card "Gardens" 4 [Victory] [GardensgetEffect]
@@ -70,10 +73,10 @@ instance Card Adventurer where
     coinValue _ = 0
     types _ = [Action]
     getSetup _= validator adventurer
-    getEffect _ = \pid -> do drawnCards <- drawsUntil pid (\cards -> return $ length (filter isTreasure cards) == 2)
-                             let (treasure, other) = partition isTreasure drawnCards
-                             forM other (discardsCard pid)
-                             return Nothing
+    getEffect _ pid = do drawnCards <- drawsUntil pid (\cards -> return $ length (filter isTreasure cards) == 2)
+                         let (treasure, other) = partition isTreasure drawnCards
+                         forM_ other (discardsCard pid)
+                         return Nothing
     getTearDown _ = discarder adventurer
 
 data BureaucratResult = Returned CardWrap | Revealed [CardWrap]
@@ -86,18 +89,18 @@ instance Card Bureaucrat where
     coinValue _ = 0
     types _ = [Action, Attack]
     getSetup _= validator bureaucrat
-    getEffect _ = \pid -> do s <- getCard silver
-                             case s of 
-                               Nothing -> return ()
-                               Just card -> modifyPlayer pid $ (\p -> p{deck=card:deck p})
-                             attack pid $ \otherPlayer -> do h <- currentHand otherPlayer
-                                                             let victoryCards = filter isVictory h
-                                                             if (null victoryCards) 
-                                                                then return $ Revealed h
-                                                                else let c = head victoryCards in
-                                                                      do returnsCard otherPlayer c
-                                                                         return $ Returned c
-                             return Nothing
+    getEffect _ pid = do s <- getCard silver
+                         case s of
+                           Nothing -> return ()
+                           Just card -> modifyPlayer pid (\p -> p{deck=card:deck p})
+                         attack pid $ \otherPlayer -> do h <- currentHand otherPlayer
+                                                         let victoryCards = filter isVictory h
+                                                         if null victoryCards
+                                                            then return $ Revealed h
+                                                            else let c = head victoryCards in
+                                                                  do returnsCard otherPlayer c
+                                                                     return $ Returned c
+                         return Nothing
     getTearDown _ = discarder bureaucrat
 
 data Cellar = Cellar
@@ -116,7 +119,7 @@ instance Effectful Cellar [CardWrap] where
                                   , effectFunction = \pid -> getEffect cellar pid <> (pid `discardsAll` cards >> return Nothing)
                                   , tearDownFunction = getTearDown cellar
                                   }
-                                  
+
 data Chancellor = Chancellor
 chancellor = mkCard Chancellor
 instance Card Chancellor where
@@ -131,7 +134,7 @@ instance Card Chancellor where
 instance Effectful Chancellor Bool where
     chancellor `with` False = fromCard chancellor
     chancellor `with` True = Virtual { setupFunction = getSetup chancellor
-                                     , effectFunction = \pid -> getEffect chancellor pid <> 
+                                     , effectFunction = \pid -> getEffect chancellor pid <>
                                                                 (modifyPlayer pid (\p -> p{deck=[],discard=deck p ++ discard p}) >> return Nothing)
                                      , tearDownFunction = getTearDown chancellor
                                      }
@@ -191,7 +194,7 @@ instance Card ThroneRoom where
     getTearDown _ = discarder throneroom
 
 instance Playable a => Effectful ThroneRoom a where
-    throneRoom `with` playable = Virtual { setupFunction = \pid -> do r1 <- getSetup throneRoom pid 
+    throneRoom `with` playable = Virtual { setupFunction = \pid -> do r1 <- getSetup throneRoom pid
                                                                       case r1 of
                                                                         Nothing -> do state <- get
                                                                                       getTearDown throneRoom pid
@@ -203,7 +206,7 @@ instance Playable a => Effectful ThroneRoom a where
                                          , tearDownFunction = \pid -> getTearDown throneRoom pid <> tearDown pid playable
                                          }
 
-data Smithy = Smithy 
+data Smithy = Smithy
 smithy = mkCard Smithy
 instance Card Smithy where
     name _ = "Smithy"
@@ -236,4 +239,4 @@ instance Card Woodcutter where
     getEffect _ = plusCoins 1 <> plusBuys 1
     getTearDown _ = discarder woodcutter
 
-originalCards = [smithy, throneroom, village, woodcutter]                
+originalCards = [smithy, throneroom, village, woodcutter]

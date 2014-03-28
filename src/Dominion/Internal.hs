@@ -1,20 +1,24 @@
-{-# LANGUAGE ExistentialQuantification, FlexibleInstances, OverlappingInstances, UndecidableInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE OverlappingInstances      #-}
+{-# LANGUAGE UndecidableInstances      #-}
 
 module Dominion.Internal where
 import           Control.Applicative
 import           Control.Arrow
-import           Control.Lens        hiding (has, indices)
-import           Control.Monad       (liftM)
+import           Control.Lens         hiding (has, indices)
+import           Control.Monad        (liftM)
 import           Control.Monad.Logger
-import           Control.Monad.State hiding (state)
+import           Control.Monad.State  hiding (state)
 import           Data.List
-import           Data.Map.Lazy     ((!))
-import qualified Data.Map.Lazy     as M
+import           Data.Map.Lazy        ((!))
+import qualified Data.Map.Lazy        as M
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Ord
 import           Dominion.Utils
-import           Prelude             hiding (log)
+import           Prelude              hiding (log)
 import           System.IO.Unsafe
 import           Text.Printf
 
@@ -51,15 +55,15 @@ data GameStats = GameStats {
 -- > state <- get
 -- > let roundNum = round state
 data GameState = GameState {
-                    players :: [Player],
+                    players  :: [Player],
                     -- | all the cards still in play.
-                    cards   :: M.Map CardWrap Int,
+                    cards    :: M.Map CardWrap Int,
                     -- | round number
-                    roundNum   :: Int,
-                    verbose :: Bool,
+                    roundNum :: Int,
+                    verbose  :: Bool,
                     -- | stats to track over the course of the game
-                    stats :: [GameStats]
-} 
+                    stats    :: [GameStats]
+}
 
 instance Show GameState where
   show gs = "GameState {players: " ++ show (players gs)
@@ -87,13 +91,13 @@ class Card a where
   cost      :: a -> Int
   coinValue :: a -> Int
   types     :: a -> [CardType]
-  getSetup  :: a -> (PlayerId -> Dominion PlayResult)
+  getSetup  :: a -> PlayerId -> Dominion PlayResult
   getSetup _ = const mempty
-  getEffect    :: a -> (PlayerId -> Dominion PlayResult)
+  getEffect    :: a -> PlayerId -> Dominion PlayResult
   getEffect _ = const mempty
-  getTearDown :: a -> (PlayerId -> Dominion PlayResult)
+  getTearDown :: a -> PlayerId -> Dominion PlayResult
   getTearDown _ = const mempty
-  points :: a -> (PlayerId -> Dominion Int)
+  points :: a -> PlayerId -> Dominion Int
   points _ = const $ return 0
 
 data CardWrap = forall a . Card a => CardWrap a
@@ -109,13 +113,13 @@ instance Card CardWrap where
   points (CardWrap c) = points c
 
 instance Card a => Show a where
-   show c = name c
+   show = name
 
 instance Card a => Ord a where
-  c1 `compare` c2 = (name c1) `compare` (name c2)
+  compare = comparing name
 
 instance Card a => Eq a where
-  c1 == c2 = (name c1) == (name c2)
+  c1 == c2 = name c1 == name c2
 
 class Playable a where
   setup :: PlayerId -> a -> Dominion PlayResult
@@ -131,8 +135,8 @@ class Playable a where
 --play pid card = _|_
 --player `plays` (card `with` followup)
 
-data Virtual = Virtual {setupFunction :: PlayerId -> Dominion PlayResult
-                       ,effectFunction :: PlayerId -> Dominion PlayResult
+data Virtual = Virtual {setupFunction    :: PlayerId -> Dominion PlayResult
+                       ,effectFunction   :: PlayerId -> Dominion PlayResult
                        ,tearDownFunction :: PlayerId -> Dominion PlayResult
                        }
 
@@ -155,15 +159,15 @@ instance Monoid (Dominion PlayResult) where
   d1 `mappend` d2 = do r <- d1
                        case r of
                          Nothing -> d2
-                         x -> return x                            
+                         x -> return x
 
 instance Card a => Playable a where
-  setup pid card = (getSetup card) pid
+  setup pid card = getSetup card pid
   effect pid card = do log pid $ printf "plays a %s!" (name card)
                        getEffect card pid
-  tearDown pid card = (getTearDown card) pid
-                  
-                                            
+  tearDown pid card = getTearDown card pid
+
+
 
 -- | Given a playerId, run some actions for this player. Example:
 --
@@ -174,20 +178,6 @@ type Strategy = PlayerId -> Dominion ()
 -- you get a `PlayResult`. A `PlayResult` is either a `Left` with an error message,
 -- or a `Right` with a value.
 type PlayResult = Maybe String
-
--- | You can set these options if you use `dominionWithOpts`. Example:
---
--- > main = dominionWithOpts [Iterations 1, Log True, Cards [smithy]] ...
-data Option =
-            -- | Number of iterations to run.
-            Iterations Int
-            -- | Enable logging
-            | Log Bool
-            -- | A list of cards that you definitely want in the game.
-            -- Useful if you are testing a strategy that relies on
-            -- a particular card.
-            | Cards [CardWrap]
-            deriving (Show)
 
 -- | Each `PlayerResult` is a tuple of a player and their final score.
 type PlayerResult = (Player, Int)
@@ -267,7 +257,7 @@ getCard card = do
     if empty
       then return Nothing
       else do
-        modify $ \s -> s{cards=(decrement card (cards s))}
+        modify $ \s -> s{cards=decrement card (cards s)}
         return $ Just card
 
 -- | Given a player id and a number of cards to draw, draws that many cards
@@ -287,7 +277,7 @@ drawFromDeck playerId numCards = do
    draw numCards = do
        player <- getPlayer playerId
        let drawnCards = take numCards (deck player)
-       modifyPlayer playerId $ (\p -> p{deck=drop numCards (deck p),hand=(hand p) ++ drawnCards})
+       modifyPlayer playerId (\p -> p{deck=drop numCards (deck p),hand=hand p ++ drawnCards})
        return drawnCards
 
 -- | Like `modify` for the `State` monad, but works on players.
@@ -317,7 +307,7 @@ playTurn playerId strategy = do
     roundNum <- getRound
     when (roundNum == 1) $ setupForTurn playerId
     player <- getPlayer playerId
-    log playerId $ "player's hand has: " ++ (show $ hand player)
+    log playerId $ "player's hand has: " ++ show (hand player)
     strategy playerId
     discardHand playerId
     -- we draw from deck *after* to set up the next hand NOW,
@@ -327,11 +317,11 @@ playTurn playerId strategy = do
     -- even if its not their turn.
     setupForTurn playerId
 
-isAction card = Action `elem` (types card)
-isAttack card = Attack `elem` (types card)
-isReaction card = Reaction `elem` (types card)
-isTreasure card = Treasure `elem` (types card)
-isVictory card = Victory `elem` (types card)
+isAction card = Action `elem` types card
+isAttack card = Attack `elem` types card
+isReaction card = Reaction `elem` types card
+isTreasure card = Treasure `elem` types card
+isVictory card = Victory `elem` types card
 
 countPoints :: PlayerId -> Dominion Int
 countPoints playerId = do
@@ -345,7 +335,7 @@ collectStats = do
   state <- get
   let ids = indices $ players state
   vps <- mapM (\x -> do points <- countPoints x
-                        return (x, points)) ids 
+                        return (x, points)) ids
   return GameStats{victoryPoints=M.fromList vps}
 
 -- | Get player from game state specified by this id.
@@ -364,10 +354,10 @@ collectStats = do
 getPlayer :: PlayerId -> Dominion Player
 getPlayer playerId = do
     state <- get
-    return $ (players state) !! playerId
+    return $ players state !! playerId
 
 -- | Convenience function. @ 4 \`cardsOf\` estate @ is the same as @ take 4 . repeat $ estate @
-cardsOf = replicate 
+cardsOf = replicate
 
 -- | Move this players discards + hand into his deck and shuffle the deck.
 shuffleDeck :: PlayerId -> Dominion ()
@@ -389,9 +379,9 @@ validateBuy playerId card = do
     player <- getPlayer playerId
     cardGone <- pileEmpty card
     return . getFirst . mconcat . map First $
-      [failIf (money < (cost card)) $ printf "Not enough money. You have %d but this card costs %d" money (cost card)
+      [failIf (money < cost card) $ printf "Not enough money. You have %d but this card costs %d" money (cost card)
       ,failIf cardGone $ printf "We've run out of that card (%s)" (name card)
-      ,failIf ((buys player) < 1) "You don't have any buys remaining!"
+      ,failIf (buys player < 1) "You don't have any buys remaining!"
       ]
 
 -- | Check that this player is able to play this card. Returns
@@ -402,31 +392,13 @@ validatePlay playerId card = do
     player <- getPlayer playerId
     return . getFirst . mconcat . map First $
       [failIf (actions player < 1) "You don't have any actions remaining!"
-      ,failIf (card `notElem` (hand player)) $ printf
+      ,failIf (card `notElem` hand player) $ printf
         "You can't play a %s because you don't have it in your hand!" (name card)
       ]
 
 -- Discard this player's hand.
 discardHand :: PlayerId -> Dominion ()
 discardHand playerId = modifyPlayer playerId $ \player -> player{hand=[],discard=discard player ++ hand player}
-
--- for parsing options
-findIteration :: [Option] -> Maybe Int
-findIteration [] = Nothing
-findIteration (Iterations x : xs) = Just x
-findIteration (_:xs) = findIteration xs
-
--- for parsing options
-findLog :: [Option] -> Maybe Bool
-findLog [] = Nothing
-findLog (Log x : xs) = Just x
-findLog (_:xs) = findLog xs
-
--- for parsing options
-findCards :: [Option] -> Maybe [CardWrap]
-findCards [] = Nothing
-findCards (Cards x : xs) = Just x
-findCards (_:xs) = findCards xs
 
 -- | Keep drawing a card until the provided function returns true.
 -- The function gets a list of the cards drawn so far,
@@ -455,7 +427,7 @@ playerId `trashesCard` card = do
 discardsCard :: PlayerId -> CardWrap -> Dominion Bool
 playerId `discardsCard` card = do
   hasCard <- playerId `has` card
-  when hasCard $ modifyPlayer playerId $ (\p -> p{hand=delete card (hand p),discard=card:discard p})
+  when hasCard $ modifyPlayer playerId (\p -> p{hand=delete card (hand p),discard=card:discard p})
   return hasCard
 
 -- | Player discards all given cards. Returns the cards that were discarded
@@ -464,13 +436,13 @@ discardsAll pid [] = return []
 discardsAll pid (card:cards) = do
   had <- pid `discardsCard` card
   rest <- pid `discardsAll` cards
-  if had then return (card:rest) else return rest
+  return $ if had then card:rest else rest
 
 -- Player returns the given card to the top of their deck.
 returnsCard :: PlayerId -> CardWrap -> Dominion ()
 playerId `returnsCard` card = do
   hasCard <- playerId `has` card
-  when hasCard $ modifyPlayer playerId $ (\p -> p{hand=delete card (hand p), deck=card:deck p})
+  when hasCard $ modifyPlayer playerId (\p -> p{hand=delete card (hand p), deck=card:deck p})
 
 -- If the top card in the player's deck is one of the cards
 -- listed in the provided array, then discard that card (used with spy).
@@ -503,7 +475,7 @@ player `discardsTo` x = player{hand=toKeep,discard=discard player ++ toDiscard}
 -- discard pile.
 gainCardUpTo :: PlayerId -> Int -> CardWrap -> Dominion PlayResult
 gainCardUpTo playerId value card =
-  if (cost card) > value
+  if cost card > value
     then return . Just $ printf "Card is too expensive. You can gain a card costing up to %d but this card costs %d" value (cost card)
     else do
       result <- getCard card
@@ -520,40 +492,40 @@ gainCardUpTo playerId value card =
 noop :: Dominion PlayResult
 noop = mempty
 
-vpValue :: Int -> (PlayerId -> Dominion Int)
-vpValue n = \pid -> return n
+vpValue :: Int -> PlayerId -> Dominion Int
+vpValue n _ = return n
 
-validator :: CardWrap -> (PlayerId -> Dominion PlayResult)
-validator card = \pid -> do result <- validatePlay pid card
-                            case result of
-                              Just x -> return (Just x)
-                              Nothing -> return Nothing
+validator :: CardWrap -> PlayerId -> Dominion PlayResult
+validator card pid = do result <- validatePlay pid card
+                        case result of
+                          Just x -> return (Just x)
+                          Nothing -> return Nothing
 
-mkAction :: (PlayerId -> Dominion a) -> (PlayerId -> Dominion PlayResult)
-mkAction action = \pid -> do action pid
-                             return Nothing
+mkAction :: (PlayerId -> Dominion a) -> PlayerId -> Dominion PlayResult
+mkAction action pid = do action pid
+                         return Nothing
 
-trasher :: CardWrap -> (PlayerId -> Dominion PlayResult)
+trasher :: CardWrap -> PlayerId -> Dominion PlayResult
 trasher card = mkAction $ \pid -> do log pid ("trashes a " ++ show card)
-                                     trashesCard pid card 
+                                     trashesCard pid card
 
-discarder :: CardWrap -> (PlayerId -> Dominion PlayResult)
-discarder card = mkAction $ \pid -> discardsCard pid card 
+discarder :: CardWrap -> PlayerId -> Dominion PlayResult
+discarder card = mkAction $ \pid -> discardsCard pid card
 
-plusCards :: Int -> (PlayerId -> Dominion PlayResult)
+plusCards :: Int -> PlayerId -> Dominion PlayResult
 plusCards n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " cards")
                                     cards <- drawFromDeck pid n
                                     log pid ("drew " ++ show cards)
 
-plusActions :: Int -> (PlayerId -> Dominion PlayResult)
+plusActions :: Int -> PlayerId -> Dominion PlayResult
 plusActions n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " actions")
                                       modifyPlayer pid $ \p -> p{actions=actions p + n}
 
-plusCoins :: Int -> (PlayerId -> Dominion PlayResult)
+plusCoins :: Int -> PlayerId -> Dominion PlayResult
 plusCoins n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " coins")
                                     modifyPlayer pid $ \p -> p{extraMoney=extraMoney p + n}
 
-plusBuys :: Int -> (PlayerId -> Dominion PlayResult)
+plusBuys :: Int -> PlayerId -> Dominion PlayResult
 plusBuys n = mkAction $ \pid -> do log pid ("+ " ++ show n ++ " buys")
                                    modifyPlayer pid $ \p -> p{buys=buys p + n}
 

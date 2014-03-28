@@ -10,20 +10,20 @@ bigMoney playerId = playerId `buysByPreference` [province, gold, duchy, silver, 
 bigMoneySmithy playerId = do
     playerId `plays` smithy
     roundNum <- getRound
-    if (roundNum < 6)
+    if roundNum < 6
         then playerId `buysByPreference` [province, gold, smithy, silver]
         else playerId `buysByPreference` [province, gold, duchy, silver, estate]
 
 bigMoney2 playerId = do 
     roundNum <- getRound
-    if (roundNum < 6)
+    if roundNum < 6
         then playerId `buysByPreference` [province, gold, silver]
         else playerId `buysByPreference` [province, gold, duchy, silver, estate]
 
 villageSmithy playerId = do
     playerId `playsByPreference` [village, smithy]
     roundNum <- getRound
-    if (roundNum < 6)
+    if roundNum < 6
         then playerId `buysByPreference` [province, gold, smithy, village, silver]
         else playerId `buysByPreference` [province, gold, duchy, silver, estate]
 
@@ -32,7 +32,7 @@ throneRoomSmithy playerId = do
     playerId `plays` (ThroneRoom `with` smithy)
     playerId `plays` smithy
     roundNum <- getRound
-    if (roundNum < 6)
+    if roundNum < 6
         then playerId `buysByPreference` [province, gold, smithy, silver]
         else playerId `buysByPreference` [province, gold, duchy, throneroom, silver, estate]      
 

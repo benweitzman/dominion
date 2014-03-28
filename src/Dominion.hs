@@ -10,7 +10,7 @@ module Dominion (
     getRound,
     has,
     handValue,
-    Option(..),
+    Options(..),
     pileEmpty,
     plays,
     playsByPreference,
@@ -36,7 +36,18 @@ import qualified Dominion.Cards         as CA
 import           Dominion.Internal
 import           Dominion.Utils
 import           Prelude                hiding (log)
+import           System.IO
 import           Text.Printf
+
+data Options = Options {
+  numIterations     :: Int,
+  requiredCardNames :: [String],
+  verboseOutput     :: Bool,
+  logLevel          :: Maybe LogLevel
+}
+
+defaultOptions :: Options
+defaultOptions = Options 1000 [] False Nothing
 
 -- | Convenience function. @ name \`uses\` strategy @ is the same as writing
 -- @ (name, strategy) @
@@ -50,37 +61,41 @@ name `uses` strategy = (makePlayer name, strategy)
 --
 -- > main = dominion ["adit" `uses` bigMoney, "maggie" `uses` bigMoqney]
 dominion :: [(Player, Strategy)] -> IO [Result]
-dominion = dominionWithOpts []
+dominion = dominionWithOpts defaultOptions
 
 -- | Same as `dominion`, but allows you to pass in some options. Example:
 --
 -- > dominionWithOpts [Iterations 5, Log True] ["adit" `uses` bigMoney, "maggie" `uses` bigMoney]
-dominionWithOpts :: [Option] -> [(Player, Strategy)] -> IO [Result]
+dominionWithOpts :: Options -> [(Player, Strategy)] -> IO [Result]
 dominionWithOpts options list = do
     results <- forM [1..iterations] $ \i -> do
       gameState <- makeGameState options (rotate i players)
-      runStdoutLoggingT $ evalStateT (run $ rotate i strategies) gameState
+      let runLogger = case logLevel options of
+                        Nothing -> (`runLoggingT` gatedOutput stdout LevelError)
+                        Just level -> (`runLoggingT` gatedOutput stdout level)
+      runLogger $ evalStateT (run $ rotate i strategies) gameState
     let winnerNames = map winner results
     forM_ players $ \player -> do
       let name = playerName player
       putStrLn $ printf "player %s won %d times" name (count name winnerNames)
     return results
   where (players, strategies) = unzip list
-        iterations    = fromMaybe 1000 (findIteration options)
+        iterations = numIterations options
 
 -- | Given a name, creates a player with that name.
 makePlayer :: String -> Player
 makePlayer name = Player name [] (7 `cardsOf` CA.copper ++ 3 `cardsOf` CA.estate) [] 1 1 0
 
-makeGameState :: [Option] -> [Player] -> IO GameState
+makeGameState :: Options -> [Player] -> IO GameState
 makeGameState options players = do
     actionCards_ <- deckShuffle CA.allActionCards
-    let requiredCards = take 10 $ fromMaybe [] (findCards options)
-        verbose       = fromMaybe False (findLog options)
+    let requiredCards = take 10 . mapMaybe toCard $ requiredCardNames options
+        verbose       = verboseOutput options
         actionCards   = take (10 - length requiredCards) actionCards_ ++ requiredCards
         cards         = M.fromList ([(CA.copper, 60), (CA.silver, 40), (CA.gold, 30),
                                     (CA.estate, 12), (CA.duchy, 12), (CA.province, 12)]
                                     ++ [(c, 10) | c <- actionCards])
+        toCard s = find ((== s) . name) actionCards_
     return $ GameState players cards 1 verbose []
 
 gameOver :: M.Map CardWrap Int -> Bool
@@ -116,8 +131,7 @@ returnResults = do
         pidToResult = zip (indices ps) results
     when (verbose state) $ do
       liftIO $ putStrLn "Game Over!"
-      forM_ pidToResult $ \(pid, (player, points)) -> liftIO $ do
-        putStrLn $ printf "player %s got %d points" (playerName player) points
+      forM_ pidToResult $ \(pid, (player, points)) -> liftIO $ putStrLn $ printf "player %s got %d points" (playerName player) points
       lift $ printMultiGraph (80, 20) $ map (\(pid, (player, points)) -> (vps M.! pid, head $ playerName player)) pidToResult
     return $ Result results winner
 
@@ -193,5 +207,5 @@ playerId `plays` card = do
     case result of
         Just x -> return (Just x)
         Nothing -> do modifyPlayer playerId (\p -> p{actions = actions p - 1})
-                      return $ Nothing
+                      return Nothing
 
