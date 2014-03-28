@@ -1,12 +1,21 @@
+{-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
+
 module Dominion.Utils where
-import Control.Monad
-import Control.Monad.State
-import qualified Data.Map.Lazy as M
-import Data.Random.Extras
-import Data.Random hiding (shuffle)
-import System.Random
-import Language.Haskell.HsColour.ANSI
-import Data.List
+import           Control.Arrow
+import           Control.Monad
+import           Control.Monad.Logger
+import           Control.Monad.State
+import           Data.List
+import qualified Data.Map.Lazy                  as M
+import           Data.Ord
+import           Data.Random                    hiding (shuffle)
+import           Data.Random.Extras
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text as T
+import Data.Text.Format
+import Data.Text.Format.Params
+import           Language.Haskell.HsColour.ANSI
+import           System.Random
 
 red = highlight [Foreground Red]
 green = highlight [Foreground Green]
@@ -20,15 +29,37 @@ every n xs = case drop (n-1) xs of
               (y:ys) -> y : every n ys
               [] -> []
 
-printGraph :: (Int, Int) -> [Int] -> IO ()
-printGraph (width, height) values = mapM_ putStrLn . (transpose . map reverse) $ rows
-    where n = length values
-          yDiff = maximum values - minimum values      
+fmt :: Params ps => Format -> ps -> T.Text
+fmt f ps = TL.toStrict $ format f ps
+
+printGraph :: (Int, Int) -> [Int] -> LoggingT IO ()
+printGraph dimmensions values = printMultiGraph dimmensions [(values, '*')]
+
+printMultiGraph :: (Int, Int) -> [([Int], Char)] -> LoggingT IO ()
+printMultiGraph _ [] = return ()
+printMultiGraph (width, height) sequences = do
+    $(logDebug) $ fmt "{}" [Shown sortedRows]
+    $(logDebug) $ fmt "{}" [Shown differenceRows]
+    liftIO $ mapM_ putStrLn . (transpose . map reverse) $ rows
+    where n = length . fst $ head sequences
+          trimmed = map (\(vs, c) -> (take n vs, c)) sequences
+          maxVal = maximum $ map (maximum . fst) trimmed
+          minVal = minimum $ map (minimum . fst) trimmed
+          yDiff = maxVal - minVal
           sampleRate = max 1 $ n `div` width
-          samples = every sampleRate values 
-          rows = map toRow samples
-          toRow x = replicate (fill x - 1) ' ' ++ "*" ++ replicate (height - fill x) ' '
-          fill x = ((x - minimum values) * height) `div` yDiff
+          samples = map (first (\x -> every sampleRate x)) trimmed
+          numSamples = length .fst $ head samples
+          collatedSamples = map (\idx -> map (\(values, c) -> (values !! idx, c)) samples) [0..numSamples-1]
+          sortedRows = map (sortBy (comparing fst)) collatedSamples :: [[(Int, Char)]]
+          differenceRows = map diffList sortedRows
+          diffList [] = []
+          diffList xs@(y:ys) = y:zipWith (\(a1, b1) (a2, b2) -> (a1 - a2, b1)) ys xs
+          rows = map toRow differenceRows
+          toRow points = pad $ foldl accumRow "" points
+          accumRow row (0, _) = tail row ++ "*"
+          accumRow row (point, c) = row ++ replicate (fill point - 1) ' ' ++ [c]
+          pad row = row ++ replicate (height - length row) ' '
+          fill x = ((x - minVal) * height) `div` yDiff
 
 count :: Eq a => a -> [a] -> Int
 count x list = length $ filter (==x) list

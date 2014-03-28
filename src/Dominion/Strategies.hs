@@ -1,7 +1,6 @@
 module Dominion.Strategies where
 import Dominion
 import Dominion.Cards
-import qualified Dominion.Types as T
 import Control.Monad
 
 -- | Buy the most expensive victory or treasure card you can.
@@ -29,8 +28,8 @@ villageSmithy playerId = do
         else playerId `buysByPreference` [province, gold, duchy, silver, estate]
 
 throneRoomSmithy playerId = do
-    playerId `plays` (ThroneRoom `T.with` (ThroneRoom `T.with` smithy))
-    playerId `plays` (ThroneRoom `T.with` smithy)
+    playerId `plays` (ThroneRoom `with` (ThroneRoom `with` smithy))
+    playerId `plays` (ThroneRoom `with` smithy)
     playerId `plays` smithy
     roundNum <- getRound
     if (roundNum < 6)

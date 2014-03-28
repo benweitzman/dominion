@@ -1,5 +1,4 @@
 module Dominion.Cards.Base where
-import Dominion.Types
 import Dominion.Internal
 import Data.Monoid
 
