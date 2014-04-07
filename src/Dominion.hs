@@ -1,3 +1,6 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | How to use: https:\/\/github.com\/egonschiele\/dominion
 module Dominion (
     buysCard,
@@ -12,21 +15,26 @@ module Dominion (
     handValue,
     Options(..),
     pileEmpty,
-    plays,
+    playsCard,
+    playsCard_,
     playsByPreference,
     uses,
     validateBuy,
     validatePlay,
-    with
+    Dominion (..),
+    makeGameState,
+    defaultOptions,
+    HasCardInfo (..),
+    Effectful (..)
     )
 
 where
 
 import           Control.Applicative
 import           Control.Monad          hiding (join)
-import           Control.Monad.IO.Class
 import           Control.Monad.Logger
 import           Control.Monad.State    hiding (join, state)
+import           Control.Monad.Error
 import           Data.Either
 import           Data.List
 import qualified Data.Map.Lazy          as M
@@ -34,10 +42,13 @@ import           Data.Maybe
 import           Data.Ord
 import qualified Dominion.Cards         as CA
 import           Dominion.Internal
-import           Dominion.Utils
+import Dominion.Player
+import Dominion.Types
+import           Dominion.Util
 import           Prelude                hiding (log)
 import           System.IO
 import           Text.Printf
+import qualified Data.Text as T
 
 data Options = Options {
   numIterations     :: Int,
@@ -60,31 +71,42 @@ name `uses` strategy = (makePlayer name, strategy)
 -- > import Dominion.Strategies
 --
 -- > main = dominion ["adit" `uses` bigMoney, "maggie" `uses` bigMoqney]
-dominion :: [(Player, Strategy)] -> IO [Result]
+dominion :: [(Player, Strategy)] -> IO (Maybe [Result])
 dominion = dominionWithOpts defaultOptions
 
 -- | Same as `dominion`, but allows you to pass in some options. Example:
 --
 -- > dominionWithOpts [Iterations 5, Log True] ["adit" `uses` bigMoney, "maggie" `uses` bigMoney]
-dominionWithOpts :: Options -> [(Player, Strategy)] -> IO [Result]
+dominionWithOpts :: Options -> [(Player, Strategy)] -> IO (Maybe [Result])
 dominionWithOpts options list = do
     results <- forM [1..iterations] $ \i -> do
       gameState <- makeGameState options (rotate i players)
       let runLogger = case logLevel options of
                         Nothing -> (`runLoggingT` gatedOutput stdout LevelError)
                         Just level -> (`runLoggingT` gatedOutput stdout level)
-      runLogger $ evalStateT (run $ rotate i strategies) gameState
-    let winnerNames = map winner results
-    forM_ players $ \player -> do
-      let name = playerName player
-      putStrLn $ printf "player %s won %d times" name (count name winnerNames)
-    return results
+      runLogger $ evalStateT (runErrorT . runDominion $ (run $ rotate i strategies)) gameState
+    case sequence results of
+      Left x -> print x >> return Nothing
+      Right x-> do
+        let winnerNames = map winner x
+        forM_ players $ \player -> do
+          let name = playerName player
+          putStrLn $ printf "player %s won %d times" name (count name winnerNames)
+        return $ Just x
   where (players, strategies) = unzip list
         iterations = numIterations options
 
 -- | Given a name, creates a player with that name.
 makePlayer :: String -> Player
-makePlayer name = Player name [] (7 `cardsOf` CA.copper ++ 3 `cardsOf` CA.estate) [] 1 1 0
+makePlayer name = Player
+    { playerName = name
+    , discard =  (7 `cardsOf` CA.copper ++ 3 `cardsOf` CA.estate)
+    , deck = []
+    , hand = []
+    , actions = 1
+    , buys = 1
+    , money = 0
+    }
 
 makeGameState :: Options -> [Player] -> IO GameState
 makeGameState options players = do
@@ -96,9 +118,15 @@ makeGameState options players = do
                                     (CA.estate, 12), (CA.duchy, 12), (CA.province, 12)]
                                     ++ [(c, 10) | c <- actionCards])
         toCard s = find ((== s) . name) actionCards_
-    return $ GameState players cards 1 verbose []
+    return $ GameState 
+              { cards = cards
+              , players = players
+              , roundNum = 1
+              , verbose = verbose
+              , stats = []
+              }
 
-gameOver :: M.Map CardWrap Int -> Bool
+gameOver :: M.Map (VirtualCard ()) Int -> Bool
 gameOver cards
     | cards M.! CA.province == 0 = True
     | M.size (M.filter (== 0) cards) >= 3 = True
@@ -108,7 +136,8 @@ game :: [Strategy] -> Dominion ()
 game strategies = do
    state <- get
    let ids = indices $ players state
-   forM_ (zip ids strategies) (uncurry playTurn)
+       idsAndStrategies = zip ids strategies
+   forM_ idsAndStrategies (uncurry playTurn)
 
 run :: [Strategy] -> Dominion Result
 run strategies = do
@@ -132,26 +161,22 @@ returnResults = do
     when (verbose state) $ do
       liftIO $ putStrLn "Game Over!"
       forM_ pidToResult $ \(pid, (player, points)) -> liftIO $ putStrLn $ printf "player %s got %d points" (playerName player) points
-      lift $ printMultiGraph (80, 20) $ map (\(pid, (player, points)) -> (vps M.! pid, head $ playerName player)) pidToResult
+      printMultiGraph (80, 20) $ map (\(pid, (player, points)) -> (vps M.! pid, head $ playerName player)) pidToResult
     return $ Result results winner
 
 -- | Player buys a card. Example:
 --
 -- > playerId `buys` smithy
-buysCard :: PlayerId -> CardWrap -> Dominion PlayResult
-buysCard playerId card = do
-    validation <- validateBuy playerId card
-    case validation of
-      Just x -> return $ Just x
-      Nothing -> do
-                 money <- handValue playerId
-                 modifyPlayer playerId $ \p -> p{discard=card:discard p
-                                                ,buys=buys p - 1
-                                                ,extraMoney=extraMoney p - cost card
-                                                }
-                 modify $ \s -> s{cards=decrement card (cards s)}
-                 log playerId $ printf "bought a %s" (name card)
-                 return Nothing
+buysCard :: PlayerId -> VirtualCard a -> Dominion Bool
+buysCard playerId card = (buysCard_ playerId card >> return True) `catchError` \_ -> return False
+
+buysCard_ :: PlayerId -> VirtualCard a -> Dominion ()
+buysCard_ playerId card = do
+    validateBuy playerId card 
+    money <- handValue playerId
+    modifyPlayer playerId $ modifyDiscard (void card:) . modifyBuys pred . modifyMoney (\x -> x - cost card)
+    modify $ \s -> s{cards=decrement (void card) (cards s)}
+    log playerId $ printf "bought a %s" (name card)
 
 -- | Give an array of cards, in order of preference.
 -- This function will buy as many cards as possible, in order of
@@ -159,26 +184,22 @@ buysCard playerId card = do
 --
 -- > playerId `buysByPreference` [province, duchy]
 --
--- And you have 16 money and two buys. You will buy two provinces.
+-- And you have 16 money and two buys. You will buy two provinces.s
 -- This runs all the same validations as `buys`.
-buysByPreference :: PlayerId -> [CardWrap] -> Dominion ()
-buysByPreference playerId cards = do
-    purchasableCards <- filterM (\card -> maybeToBool <$> validateBuy playerId card) cards
-    unless (null purchasableCards) $ do
-      playerId `buysCard` head purchasableCards
-      playerId `buysByPreference` cards
+buysByPreference :: PlayerId -> [VirtualCard ()] -> Dominion ()
+buysByPreference _ [] = return ()
+buysByPreference playerId cards@(c:cs) = do 
+          $(logDebug) "about to buy"
+          (playerId `buysCard_` c >> playerId `buysByPreference` cards) `catchError` \_ -> playerId `buysByPreference` cs
 
 -- | Give an array of cards, in order of preference.
 -- This function will try to play as many cards as possible, in order of preference.
 -- Note: if any card requires a `Followup` (like `cellar` or
 -- `chapel`), you need to use `plays` instead. This runs all the same
 -- validations as `plays`.
-playsByPreference :: PlayerId -> [CardWrap] -> Dominion ()
-playsByPreference playerId cards = do
-    playableCards <- filterM (\card -> maybeToBool <$> validatePlay playerId card) cards
-    unless (null playableCards) $ do
-      playerId `plays` head playableCards
-      playerId `playsByPreference` cards
+playsByPreference :: PlayerId -> [Virtual ()] -> Dominion ()
+playsByPreference playerId cards@(c:cs) = do
+    playerId `playsCard_` c >> playerId `playsByPreference` cards `catchError` \_ -> playerId `playsByPreference` cs
 
 -- | In the simplest case, this lets you play a card, like this:
 --
@@ -201,11 +222,12 @@ playsByPreference playerId cards = do
 -- Here's another example:
 --
 -- > playerId `plays` throneRoom `with` (ThroneRoom market)
-plays :: Playable a => PlayerId -> a -> Dominion PlayResult
-playerId `plays` card = do
-    result <- play playerId card
-    case result of
-        Just x -> return (Just x)
-        Nothing -> do modifyPlayer playerId (\p -> p{actions = actions p - 1})
-                      return Nothing
+playsCard :: Virtualizable a b => PlayerId -> a -> Dominion (Maybe b)
+playerId `playsCard` card = (playerId `playsCard_` card >>= return . Just) `catchError` \_ -> return Nothing
+
+playsCard_ :: Virtualizable a b => PlayerId -> a -> Dominion b
+playerId `playsCard_` card = do 
+    result <- plays playerId card
+    modifyPlayer playerId $ modifyActions pred
+    return result
 

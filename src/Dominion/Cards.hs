@@ -1,13 +1,18 @@
-module Dominion.Cards (
-  module Dominion.Cards.Base,
-  module Dominion.Cards.Original,
-  module Dominion.Cards
-) where
+module Dominion.Cards
+    ( module Dominion.Cards.Base
+    , module Dominion.Cards.Original
+    , allCards
+    , allActionCards
+    )
 
+where
+
+import Dominion.Types
 import Dominion.Cards.Base
 import Dominion.Cards.Original
--- import Dominion.Cards.Intrigue
 
--- | All action cards available for use.
--- allActionCards = [originalCards ++ intrigueCards]
-allActionCards = originalCards
+allActionCards :: CardList
+allActionCards = []
+
+allCards :: CardList
+allCards = treasureCards ++ victoryCards ++ allActionCards

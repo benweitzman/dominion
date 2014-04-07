@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Dominion.Utils where
+module Dominion.Util where
 import           Control.Arrow
 import           Control.Monad
 import           Control.Monad.Logger
@@ -56,10 +56,10 @@ every n xs = case drop (n-1) xs of
 fmt :: Params ps => Format -> ps -> T.Text
 fmt f ps = TL.toStrict $ format f ps
 
-printGraph :: (Int, Int) -> [Int] -> LoggingT IO ()
+printGraph :: (MonadLogger m, MonadIO m) => (Int, Int) -> [Int] -> m ()
 printGraph dimmensions values = printMultiGraph dimmensions [(values, '*')]
 
-printMultiGraph :: (Int, Int) -> [([Int], Char)] -> LoggingT IO ()
+printMultiGraph :: (MonadLogger m, MonadIO m) => (Int, Int) -> [([Int], Char)] -> m ()
 printMultiGraph _ [] = return ()
 printMultiGraph (width, height) sequences = liftIO $ mapM_ putStrLn . transpose . map reverse $ rows
     where n = length . fst $ head sequences

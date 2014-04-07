@@ -1,76 +1,90 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Dominion.Cards.Base where
-import           Data.Monoid
-import           Dominion.Internal
 
-{-
-copper   = mkCard "Copper" 0 1 [Treasure] noop
-silver   = mkCard "Silver" 3 2 [Treasure] noop
-gold     = mkCard "Gold" 6 3 [Treasure] noop
+import Dominion.Card
+import Dominion.Types
 
-estate   = mkCard "Estate" 2 0 [Victory] (vpValue 1)
-duchy    = mkCard "Duchy" 5 0 [Victory] (vpValue 3)
-province = mkCard "Province" 8 0 [Victory] (vpValue 6)
-curse    = mkCard "Curse" 0 0 [Victory] (vpValue (-1))
--}
 data Copper = Copper
+instance Card Copper () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Copper"
+               , getCost = 0
+               , getValue = 1
+               , getTypes = [Treasure]
+               }
+    cardEffect _ = \_ -> return ()
 copper = mkCard Copper
-instance Card Copper where
-    name _ = "Copper"
-    cost _ = 0
-    coinValue _ = 1
-    types _ = [Treasure]
 
 data Silver = Silver
+instance Card Silver () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Silver"
+               , getCost = 3
+               , getValue = 2
+               , getTypes = [Treasure]
+               }
+    cardEffect _ = \_ -> return ()
 silver = mkCard Silver
-instance Card Silver where
-    name _ = "Silver"
-    cost _ = 3
-    coinValue _ = 2
-    types _ = [Treasure]
 
 data Gold = Gold
+instance Card Gold () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Gold"
+               , getCost = 6
+               , getValue = 3
+               , getTypes = [Treasure]
+               }
+    cardEffect _ = \_ -> return ()
 gold = mkCard Gold
-instance Card Gold where
-    name _ = "Gold"
-    cost _ = 6
-    coinValue _ = 3
-    types _ = [Treasure]
 
 data Estate = Estate
+instance Card Estate () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Estate"
+               , getCost = 2
+               , getValue = 0
+               , getTypes = [Victory]
+               , getPoints = vpValue 1
+               }
+    cardEffect _ = \_ -> return ()
 estate = mkCard Estate
-instance Card Estate where
-    name _ = "Estate"
-    cost _ = 2
-    coinValue _ = 0
-    types _ = [Victory]
-    points _ = vpValue 1
 
 data Duchy = Duchy
+instance Card Duchy () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Duchy"
+               , getCost = 5
+               , getTypes = [Victory]
+               , getPoints = vpValue 3
+               }
+    cardEffect _ = \_ -> return ()
 duchy = mkCard Duchy
-instance Card Duchy where
-    name _ = "Duchy"
-    cost _ = 5
-    coinValue _ = 0
-    types _ = [Victory]
-    points _ = vpValue 3
 
 data Province = Province
+instance Card Province () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Province"
+               , getCost = 8
+               , getTypes = [Victory]
+               , getPoints = vpValue 6
+               }
+    cardEffect _ = \_ -> return ()
 province = mkCard Province
-instance Card Province where
-    name _ = "Province"
-    cost _ = 8
-    coinValue _ = 0
-    types _ = [Victory]
-    points _ = vpValue 6
 
 data Curse = Curse
+instance Card Curse () where
+    cardInfo _ = defaultCardInfo
+               { getName = "Curse"
+               , getCost = 0
+               , getTypes = [Victory]
+               , getPoints = vpValue (-1)
+               }
+    cardEffect _ = \_ -> return ()
 curse = mkCard Curse
-instance Card Curse where
-    name _ = "Curse"
-    cost _ = 0
-    coinValue _ = 0
-    types _ = [Victory]
-    points _ = vpValue (-1)
 
+treasureCards :: CardList
 treasureCards = [copper, silver, gold]
+
+victoryCards :: CardList
 victoryCards = [estate, duchy, province, curse]

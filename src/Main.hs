@@ -1,5 +1,5 @@
 import Data.Char
-import Dominion
+import Dominion hiding (value)
 import Dominion.Cards
 import Dominion.Strategies
 import Options.Applicative
@@ -57,7 +57,7 @@ options = Options
 
 
 main = do config <- execParser opts
-          dominionWithOpts config ["adit" `uses` bigMoney, "maggie" `uses` bigMoneySmithy]
+          dominionWithOpts config ["adit" `uses` bigMoney, "maggie" `uses` stupidStrategy]
   where
     opts = info (helper <*> options)
       ( fullDesc
