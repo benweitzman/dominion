@@ -23,6 +23,7 @@ module Dominion (
     validatePlay,
     Dominion (..),
     makeGameState,
+    makePlayer,
     defaultOptions,
     HasCardInfo (..),
     Effectful (..)
@@ -40,6 +41,7 @@ import           Data.List
 import qualified Data.Map.Lazy          as M
 import           Data.Maybe
 import           Data.Ord
+import Dominion.Card
 import qualified Dominion.Cards         as CA
 import           Dominion.Internal
 import Dominion.Player
@@ -100,9 +102,10 @@ dominionWithOpts options list = do
 makePlayer :: String -> Player
 makePlayer name = Player
     { playerName = name
-    , discard =  (7 `cardsOf` CA.copper ++ 3 `cardsOf` CA.estate)
+    , discard =  (7 `cardsOf` CA.copper ++  3 `cardsOf` CA.estate)
     , deck = []
     , hand = []
+    , played = []
     , actions = 1
     , buys = 1
     , money = 0

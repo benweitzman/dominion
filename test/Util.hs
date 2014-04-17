@@ -3,6 +3,7 @@ module Util where
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import Data.String
 import Control.Monad.State
 import Control.Monad.Logger
 import Control.Monad.Error
@@ -12,16 +13,14 @@ import Dominion.Player
 import Dominion.VirtualCard
 import qualified Dominion.Cards as CA
 
-withHand :: String -> [VirtualCard ()] -> Player
-playerName `withHand` xs = Player
-                         { playerName = playerName
-                         , discard =  (7 `cardsOf` CA.copper ++ 3 `cardsOf` CA.estate)
-                         , deck = []
-                         , hand = xs
-                         , actions = 1
-                         , buys = 1
-                         , money = 0
-                         }
+instance IsString Player where 
+  fromString name = makePlayer name
+
+withHand :: Player -> [VirtualCard ()] -> Player
+p `withHand` xs = p{ hand = xs }
+
+withDeck :: Player -> [VirtualCard ()] -> Player
+p `withDeck` xs = p{ deck = xs }
 
 withPlayers :: [Player] -> Dominion a -> Assertion
 withPlayers players f = do gs <- makeGameState defaultOptions players

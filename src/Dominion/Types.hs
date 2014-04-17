@@ -77,7 +77,7 @@ instance Card a b => HasCardInfo a where
 -}
 
 class Effectful a b c | a b -> c where
-    with :: Virtualizable b d => a -> b -> Virtual c
+    with :: a -> b -> Virtual c
 
 data GameStats = GameStats {
   -- | playerId -> victory points
@@ -97,6 +97,7 @@ data Player = Player
     , hand       :: [VirtualCard ()] -- hand
     , deck       :: [VirtualCard ()] -- deck
     , discard    :: [VirtualCard ()] -- discard
+    , played     :: [VirtualCard ()]
     , actions    :: Int -- actions
     , buys       :: Int -- buys
     , money      :: Int -- money

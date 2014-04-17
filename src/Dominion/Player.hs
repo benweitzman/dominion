@@ -14,20 +14,6 @@ where
 
 import Dominion.Types
 
-{-
-
-data Player where
-    Player :: String -- name
-           -> CardList -- deck
-           -> CardList -- hand
-           -> CardList -- discard
-           -> Int -- actions
-           -> Int -- buys
-           -> Int -- money
-           -> Player
-
--}
-
 modifyDeck :: (CardList -> CardList) -> Player ->  Player
 modifyDeck f player = player{deck=(f (deck player))}
 

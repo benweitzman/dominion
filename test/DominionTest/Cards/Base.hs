@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module DominionTest.Cards.Base where
 
 import Test.Tasty

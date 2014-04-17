@@ -7,16 +7,24 @@ module Dominion.Card
     , defaultCardInfo
     , plusCards
     , plusActions
+    , plusMoney
+    , plusBuys
     , mkCard
+    , cardsOf
     )
 
 where
 
+import Control.Applicative
 import Data.Ord
 import Dominion.Types
 import Dominion.Internal
 import Dominion.Player
 import Prelude hiding (log)
+
+-- | Convenience function. @ 4 \`cardsOf\` estate @ is the same as @ take 4 . repeat $ estate @
+cardsOf :: Int -> VirtualCard a -> [VirtualCard a]
+cardsOf = replicate
 
 --------------------------
 -- CARD DEFINITION HELPERS
@@ -46,7 +54,17 @@ plusCards n pid = do log pid ("+ " ++ show n ++ " cards")
 plusActions :: Int -> PlayerId -> Dominion Int
 plusActions n pid = do log pid ("+ " ++ show n ++ " actions")
                        modifyPlayer pid $ modifyActions (+ n)
-                       return n
+                       actions <$> getPlayer pid
+
+plusMoney :: Int -> PlayerId -> Dominion Int
+plusMoney n pid = do log pid ("+ " ++ show n ++ " money")
+                     modifyPlayer pid $ modifyMoney (+ n)
+                     money <$> getPlayer pid
+
+plusBuys :: Int -> PlayerId -> Dominion Int
+plusBuys n pid = do log pid ("+ " ++ show n ++ " buys")
+                    modifyPlayer pid $ modifyBuys (+ n)
+                    buys <$> getPlayer pid
 
 noop :: PlayerId -> Dominion ()
 noop _ = return ()

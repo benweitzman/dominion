@@ -235,9 +235,6 @@ getPlayer playerId = do
     state <- get
     return $ players state !! playerId
 
--- | Convenience function. @ 4 \`cardsOf\` estate @ is the same as @ take 4 . repeat $ estate @
-cardsOf = replicate
-
 -- | Move this players discards + hand into his deck and shuffle the deck.
 shuffleDeck :: PlayerId -> Dominion ()
 shuffleDeck playerId = do player <- getPlayer playerId
@@ -245,7 +242,7 @@ shuffleDeck playerId = do player <- getPlayer playerId
                           modifyPlayer playerId shuffleFunction
 
 shuffleDeck_ :: Player -> IO (Player -> Player)
-shuffleDeck_ player = do newDeck <- deckShuffle . concat $ [deck, discard, hand] <*> pure player
+shuffleDeck_ player = do newDeck <- deckShuffle $ discard player
                          return $ const player{discard=[], deck=newDeck}
 
 
@@ -276,7 +273,7 @@ validatePlay playerId card = do
 
 -- Discard this player's hand.
 discardHand :: PlayerId -> Dominion ()
-discardHand playerId = modifyPlayer playerId $ \player -> player{hand=[],discard=discard player ++ hand player}
+discardHand playerId = modifyPlayer playerId $ \player -> player{hand=[],played=[],discard=discard player ++ hand player ++ played player}
 
 -- | Keep drawing a card until the provided function returns true.
 -- The function gets a list of the cards drawn so far,
@@ -315,7 +312,7 @@ trashesNByPreference pid n (x:xs) = do hadCard <- trashesCard pid x
 discardsCard :: PlayerId -> VirtualCard a -> Dominion Bool
 playerId `discardsCard` card = do
   hasCard <- playerId `has` card
-  when hasCard $ modifyPlayer playerId (\p -> p{hand=delete (void card) (hand p),discard=(void card):discard p})
+  when hasCard $ modifyPlayer playerId (\p -> p{hand=delete (void card) (hand p),played=(void card):played p})
   return hasCard
 
 -- | Player discards all given cards. Returns the cards that were discarded
@@ -323,7 +320,7 @@ discardsAll :: PlayerId -> CardList -> Dominion CardList
 discardsAll pid [] = return []
 discardsAll pid (card:cards) = do
   had <- pid `discardsCard` card
-  rest <- pid `discardsAll` cards
+  rest <- if had then pid `discardsAll` (card:cards) else pid `discardsAll` cards
   return $ if had then card:rest else rest
 
 -- Player returns the given card to the top of their deck.
@@ -370,7 +367,6 @@ gainCardUpTo playerId value card = do
 
 plays :: Virtualizable a b => PlayerId -> a -> Dominion b
 plays pid v = do s pid 
-                 $(logDebug) "play"
                  r <- f pid 
                  t pid
                  return r
