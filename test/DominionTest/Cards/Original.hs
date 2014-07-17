@@ -74,7 +74,7 @@ originalCardTests = testGroup "Original Card Tests"
         withPlayers ["Ben" `withHand` [void chancellor]] $ do
             p <- getPlayer 0
             let m = money p
-            result <- 0 `plays` (Chancellor `with` True)
+            result <- 0 `plays` (Chancellor `with` DiscardDeck)
             p' <- getPlayer 0
             let m' = money p'
             liftIO $ assertEqual "should have 2 more money" (2 + m) m'

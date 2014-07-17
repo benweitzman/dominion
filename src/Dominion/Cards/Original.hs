@@ -5,6 +5,7 @@
 
 module Dominion.Cards.Original where
 
+import Control.Applicative
 import Control.Monad
 
 import Dominion.Card
@@ -12,6 +13,18 @@ import Dominion.VirtualCard
 import Dominion.Types
 import Dominion.Internal
 import Dominion.Player
+
+{- TODO Adventurer
+Action  $6  
+Reveal cards from your deck until you reveal 2 Treasure cards. Put those Treasure cards 
+in your hand and discard the other revealed cards.
+-}
+
+{- TODO Bureaucrat
+Action/Attack $4
+Gain a silver card; put it on top of your deck. Each other player reveals a Victory card 
+from his hand and puts it on his deck (or reveals a hand with no Victory cards).
+-}
 
 data Cellar = Cellar
 instance Card Cellar Int where
@@ -56,17 +69,102 @@ instance Card Chancellor Int where
              }
   cardEffect _ = plusMoney 2
 
-instance Effectful Chancellor Bool Int where
-  Chancellor `with` False = toVirtual chancellor
-  Chancellor `with` True = Virtual (\pid -> do r <- f pid
-                                               p <- getPlayer pid
-                                               modifyPlayer pid $ modifyDiscard (deck p ++) . modifyDeck (const [])
-                                               return r)
+data ChancellorChoice = DiscardDeck | KeepDeck
+
+instance Effectful Chancellor ChancellorChoice Int where
+  Chancellor `with` KeepDeck = toVirtual chancellor
+  Chancellor `with` DiscardDeck = Virtual (\pid -> do r <- f pid
+                                                      p <- getPlayer pid
+                                                      modifyPlayer pid $ modifyDiscard (deck p ++) . modifyDeck (const [])
+                                                      return r)
                                    s
                                    t
     where (Virtual f s t) = toVirtual chancellor
 chancellor = mkCard Chancellor
 
+{- TODO Council Room 
+Action $5
++4 Cards, + 1 Buy
+Each other player draws a card
+-}
+
+{- TODO Feast
+Action $4
+Trash this card, gain a card up to $5
+-}
+
+data Festival = Festival
+instance Card Festival () where
+    cardInfo _ = defaultCardInfo
+               { getName   = "Festival"
+               , getCost   = 5
+               , getTypes  = [Action]
+               }
+    cardEffect _ = \pid -> void $ plusActions 2 pid >> plusBuys 1 pid >> plusMoney 2 pid
+festival = mkCard Festival
+
+data Gardens = Gardens
+instance Card Gardens () where
+  cardInfo _ = defaultCardInfo
+             { getName = "Gardens"
+             , getCost = 4
+             , getTypes = [Victory]
+             , getPoints = \pid -> do player <- getPlayer pid
+                                      let cards = concat $ [deck, discard, hand] <*> pure player
+                                      return ((length cards `div` 10) * 4)
+             }
+  cardEffect _ _ = return ()
+gardens = mkCard Gardens             
+
+data Laboratory = Laboratory
+instance Card Laboratory CardList where
+  cardInfo _ = defaultCardInfo
+             { getName = "Laboratory"
+             , getCost = 5
+             , getTypes = [Action]
+             }
+  cardEffect _ = plusActions 1 >> plusCards 2
+
+{- TODO Library 
+Action $5
+draw until you have seven cards in your hand. you may set aside any action cards drawn this way, as you draw them.
+discard the set aside cards after you finish drawing.
+-}
+
+data Market = Market
+instance Card Market CardList where
+  cardInfo _ = defaultCardInfo
+             { getName = "Market"
+             , getCost = 5
+             , getTypes = [Action]
+             }
+  cardEffect _ = plusActions 1 >> plusBuys 1 >> plusMoney 1 >> plusCards 1             
+
+{- TODO Militia
+Action/Attack $4
++$2, each other player discards down to 3 cards
+-}
+
+{- TODO Mine
+Action $5
+Trash a treasure card from your hand. gain a treasure card costing up to $3 more
+-}
+
+{- TODO Moat 
+Action/Reaction $2
++2 cards. When another player plays an attack card you may reveal this from your hand. If you do,
+you are unaffected by the attack.
+-}
+
+{- TODO Moneylender 
+Action $4
+Trash a copper from your hand. If you do +$3
+-}
+
+{- TODO Remodel
+Action $4
+Trash a card from your hand. gain a card costing up to $2 more than the trashed card
+-}
 
 data Smithy = Smithy
 instance Card Smithy CardList where
@@ -77,6 +175,19 @@ instance Card Smithy CardList where
                }
     cardEffect _ = plusCards 3
 smithy = mkCard Smithy
+
+{- TODO Spy
+Action/Attack $4
++1 card, +1 action
+each player, including you, reveals that top card of his or her deck and either discards it or puts it back, 
+your choice
+-}
+
+{- TODO Thief
+Action/Attack $4
+Each other plaer reveals the top 2 cards of his or her deck. If they revealed any Treasure cards, they trash
+one of them that you choose. You may gain any or all of these trashed cards. They discard the other revealed cards
+-}
 
 data ThroneRoom = ThroneRoom
 instance Card ThroneRoom () where
@@ -122,6 +233,11 @@ instance Card Village [VirtualCard ()] where
                }
     cardEffect _ = \pid -> plusActions 2 pid >> plusCards 1 pid
 village = mkCard Village
+
+{- TODO With 
+Action/Attack $5
++2 cards, each other player gains a curse card
+-}
 
 data Woodcutter = Woodcutter
 instance Card Woodcutter () where
