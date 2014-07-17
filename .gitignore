@@ -2,3 +2,4 @@
 dist/*
 tags
 cabal.sandbox.config
+cabal.config
